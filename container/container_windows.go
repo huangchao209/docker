@@ -14,15 +14,6 @@ const (
 	containerSecretMountPath = `C:\ProgramData\Docker\secrets`
 )
 
-// Container holds fields specific to the Windows implementation. See
-// CommonContainer for standard fields common to all containers.
-type Container struct {
-	CommonContainer
-
-	// Fields below here are platform specific.
-	NetworkSharedContainerID string
-}
-
 // ExitStatus provides exit reasons for a container.
 type ExitStatus struct {
 	// The exit code with which the container exited.
