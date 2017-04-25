@@ -254,11 +254,11 @@ func (ls *layerStore) applyTar(tx MetadataTransaction, ts io.Reader, parent stri
 	return nil
 }
 
-func (ls *layerStore) Register(ts io.Reader, parent ChainID) (Layer, error) {
-	return ls.registerWithDescriptor(ts, parent, distribution.Descriptor{})
+func (ls *layerStore) Register(ts io.Reader, parent ChainID, platform Platform) (Layer, error) {
+	return ls.registerWithDescriptor(ts, parent, platform, distribution.Descriptor{})
 }
 
-func (ls *layerStore) registerWithDescriptor(ts io.Reader, parent ChainID, descriptor distribution.Descriptor) (Layer, error) {
+func (ls *layerStore) registerWithDescriptor(ts io.Reader, parent ChainID, platform Platform, descriptor distribution.Descriptor) (Layer, error) {
 	// err is used to hold the error which will always trigger
 	// cleanup of creates sources but may not be an error returned
 	// to the caller (already exists).
@@ -293,6 +293,7 @@ func (ls *layerStore) registerWithDescriptor(ts io.Reader, parent ChainID, descr
 		layerStore:     ls,
 		references:     map[Layer]struct{}{},
 		descriptor:     descriptor,
+		platform:       platform,
 	}
 
 	if err = ls.driver.Create(layer.cacheID, pid, nil); err != nil {
@@ -395,7 +396,6 @@ func (ls *layerStore) deleteLayer(layer *roLayer, metadata *Metadata) error {
 	if err != nil {
 		return err
 	}
-
 	err = ls.store.Remove(layer.chainID)
 	if err != nil {
 		return err
@@ -525,7 +525,6 @@ func (ls *layerStore) CreateRWLayer(name string, parent ChainID, opts *CreateRWL
 	if err = ls.driver.CreateReadWrite(m.mountID, pid, createOpts); err != nil {
 		return nil, err
 	}
-
 	if err = ls.saveMount(m); err != nil {
 		return nil, err
 	}
