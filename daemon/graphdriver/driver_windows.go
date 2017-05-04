@@ -3,7 +3,6 @@ package graphdriver
 var (
 	// Slice of drivers that should be used in order
 	priority = []string{
-		"windowsfilter",
 		"lcow",
 	}
 )

@@ -250,12 +250,11 @@ func (ls *layerStore) applyTar(tx MetadataTransaction, ts io.Reader, parent stri
 		err       error
 	)
 	if runtime.GOOS == "windows" && system.LCOWSupported() && layer.Platform() != "windows" {
-		logrus.Warnln("In development - not calling graphdriver ApplyDiff for LCOW")
-	} else {
-		applySize, err = ls.driver.ApplyDiff(layer.cacheID, parent, rdr)
-		if err != nil {
-			return err
-		}
+		logrus.Warnln("In development - calling graphdriver ApplyDiff for LCOW")
+	}
+	applySize, err = ls.driver.ApplyDiff(layer.cacheID, parent, rdr)
+	if err != nil {
+		return err
 	}
 
 	// Discard trailing data but ensure metadata is picked up to reconstruct stream
@@ -317,11 +316,10 @@ func (ls *layerStore) registerWithDescriptor(ts io.Reader, parent ChainID, platf
 	// as it would fail. Instead, make this a no-op for now so that validation
 	// can be made on pull for example.
 	if runtime.GOOS == "windows" && system.LCOWSupported() && platform != "windows" {
-		logrus.Warnln("In development - not calling graphdriver Create for LCOW")
-	} else {
-		if err = ls.driver.Create(layer.cacheID, pid, nil); err != nil {
-			return nil, err
-		}
+		logrus.Warnln("In development - calling graphdriver Create for LCOW")
+	}
+	if err = ls.driver.Create(layer.cacheID, pid, nil); err != nil {
+		return nil, err
 	}
 
 	tx, err := ls.store.StartTransaction()
@@ -337,14 +335,14 @@ func (ls *layerStore) registerWithDescriptor(ts io.Reader, parent ChainID, platf
 			// as it would fail. Instead, make this a no-op for now so that validation
 			// can be made on pull for example.
 			if runtime.GOOS == "windows" && system.LCOWSupported() && platform != "windows" {
-				logrus.Warnln("In development - not calling graphdriver Create for LCOW")
-			} else {
-
-				logrus.Debugf("Cleaning up layer %s: %v", layer.cacheID, err)
-				if err := ls.driver.Remove(layer.cacheID); err != nil {
-					logrus.Errorf("Error cleaning up cache layer %s: %v", layer.cacheID, err)
-				}
+				logrus.Warnln("In development - calling graphdriver Create for LCOW")
 			}
+
+			logrus.Debugf("Cleaning up layer %s: %v", layer.cacheID, err)
+			if err := ls.driver.Remove(layer.cacheID); err != nil {
+				logrus.Errorf("Error cleaning up cache layer %s: %v", layer.cacheID, err)
+			}
+
 			if err := tx.Cancel(); err != nil {
 				logrus.Errorf("Error canceling metadata transaction %q: %s", tx.String(), err)
 			}
@@ -432,15 +430,14 @@ func (ls *layerStore) deleteLayer(layer *roLayer, metadata *Metadata) error {
 	// as it would fail. Instead, make this a no-op for now so that validation
 	// can be made on pull for example.
 	if runtime.GOOS == "windows" && system.LCOWSupported() && layer.Platform() != "windows" {
-		logrus.Warnln("In development - not calling graphdriver Remove for LCOW")
-	} else {
-		err := ls.driver.Remove(layer.cacheID)
-		if err != nil {
-			return err
-		}
+		logrus.Warnln("In development - calling graphdriver Remove for LCOW")
+	}
+	err := ls.driver.Remove(layer.cacheID)
+	if err != nil {
+		return err
 	}
 
-	err := ls.store.Remove(layer.chainID)
+	err = ls.store.Remove(layer.chainID)
 	if err != nil {
 		return err
 	}
