@@ -6,9 +6,15 @@ package lcow
 // support Linux Containers on Windows.
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
+	"os"
+	"path/filepath"
+	"strings"
 
+	"github.com/Microsoft/servicevm"
 	"github.com/Sirupsen/logrus"
 	"github.com/docker/docker/daemon/graphdriver"
 	"github.com/docker/docker/pkg/archive"
@@ -22,7 +28,14 @@ func init() {
 
 // Driver represents an LCOW graph driver.
 type Driver struct {
-	home string
+	homeDir string
+}
+
+type checker struct {
+}
+
+func (c *checker) IsMounted(path string) bool {
+	return false
 }
 
 // InitLCOW returns a new LCOW storage driver
@@ -32,7 +45,7 @@ func InitLCOW(home string, options []string, uidMaps, gidMaps []idtools.IDMap) (
 		return nil, fmt.Errorf("lcow failed to create '%s': %v", home, err)
 	}
 	return &Driver{
-		home: home,
+		homeDir: home,
 	}, nil
 }
 
@@ -52,37 +65,83 @@ func (d *Driver) Status() [][2]string {
 // Exists returns true if the given id is registered with this driver.
 func (d *Driver) Exists(id string) bool {
 	logrus.Debugf("LCOWDriver Exists() id %s", id)
-	return false
+	_, err := os.Lstat(d.dir(id))
+	return err == nil
 }
 
 // CreateReadWrite creates a layer that is writable for use as a container
 // file system.
 func (d *Driver) CreateReadWrite(id, parent string, opts *graphdriver.CreateOpts) error {
 	logrus.Debugf("LCOWDriver CreateReadWrite() id %s", id)
-	return nil
+	if err := d.Create(id, parent, opts); err != nil {
+		return err
+	}
+	return servicevm.ServiceVMCreateSandbox(d.dir(id))
 }
 
 // Create creates a new read-only layer with the given id.
 func (d *Driver) Create(id, parent string, opts *graphdriver.CreateOpts) error {
 	logrus.Debugf("LCOWDriver Create() id %s", id)
+
+	parentChain, err := d.getLayerChain(parent)
+	if err != nil {
+		return err
+	}
+
+	var layerChain []string
+	if parent != "" {
+		if !d.Exists(parent) {
+			return fmt.Errorf("Cannot create layer with missing parent %s", parent)
+		}
+		layerChain = []string{d.dir(parent)}
+	}
+	layerChain = append(layerChain, parentChain...)
+
+	layerPath := d.dir(id)
+	if err := os.Mkdir(layerPath, 755); err != nil {
+		return err
+	}
+
+	if err := d.setLayerChain(id, layerChain); err != nil {
+		if err2 := os.RemoveAll(layerPath); err2 != nil {
+			logrus.Warnf("Failed to remove layer %s: %s", layerPath, err2)
+		}
+		return err
+	}
 	return nil
 }
 
 // Remove unmounts and removes the dir information.
 func (d *Driver) Remove(id string) error {
 	logrus.Debugf("LCOWDriver Remove() id %s", id)
+
+	tmpID := fmt.Sprintf("%s-removing", id)
+	tmpLayerPath := d.dir(tmpID)
+	layerPath := d.dir(id)
+
+	if err := os.Rename(layerPath, tmpLayerPath); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+
+	if err := os.RemoveAll(tmpLayerPath); err != nil {
+		return err
+	}
+
 	return nil
 }
 
 // Get returns the rootfs path for the id. This will mount the dir at its given path.
 func (d *Driver) Get(id, mountLabel string) (string, error) {
 	logrus.Debugf("LCOWDriver Get() id %s", id)
+	// TODO @gupta-ak. graphdriver.Get() needs to return an interface
+	// instead of just a string, since the mount point doesn't exist on the host
 	return "", nil
 }
 
 // Put adds a new layer to the driver.
 func (d *Driver) Put(id string) error {
 	logrus.Debugf("LCOWDriver Put() id %s", id)
+	// TODO @gupta-ak. Service vm should unmount layer.
 	return nil
 }
 
@@ -91,6 +150,29 @@ func (d *Driver) Put(id string) error {
 // still left if the daemon was killed while it was removing a layer.
 func (d *Driver) Cleanup() error {
 	logrus.Debugf("LCOWDriver Cleanup()")
+
+	items, err := ioutil.ReadDir(d.homeDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+
+	// Note we don't return an error below - it's possible the files
+	// are locked. However, next time around after the daemon exits,
+	// we likely will be able to to cleanup successfully. Instead we log
+	// warnings if there are errors.
+	for _, item := range items {
+		if item.IsDir() && strings.HasSuffix(item.Name(), "-removing") {
+			if err := os.RemoveAll(filepath.Join(d.homeDir, item.Name())); err != nil {
+				logrus.Warnf("Failed to cleanup %s: %s", item.Name(), err)
+			} else {
+				logrus.Infof("Cleaned up %s", item.Name())
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -99,6 +181,8 @@ func (d *Driver) Cleanup() error {
 // The layer should be mounted when calling this function
 func (d *Driver) Diff(id, parent string) (_ io.ReadCloser, err error) {
 	logrus.Debugf("LCOWDriver Diff() id %s parent %s", id, parent)
+	// TODO @gupta-ak. graphdriver.Get() on the parent and then
+	// Have the service vm take the difference between the two files.
 	return nil, nil
 }
 
@@ -107,6 +191,8 @@ func (d *Driver) Diff(id, parent string) (_ io.ReadCloser, err error) {
 // The layer should not be mounted when calling this function.
 func (d *Driver) Changes(id, parent string) ([]archive.Change, error) {
 	logrus.Debugf("LCOWDriver Changes() id %s parent %s", id, parent)
+	// TODO @gupta-ak. graphdriver.Get() on the parent and then
+	// Have the service vm take the difference between the two files.
 	return nil, nil
 }
 
@@ -116,7 +202,7 @@ func (d *Driver) Changes(id, parent string) ([]archive.Change, error) {
 // The layer should not be mounted when calling this function
 func (d *Driver) ApplyDiff(id, parent string, diff io.Reader) (int64, error) {
 	logrus.Debugf("LCOWDriver ApplyDiff() id %s parent %s", id, parent)
-	return 0, nil
+	return servicevm.ServiceVMImportLayer(filepath.Join(d.homeDir, id), diff)
 }
 
 // DiffSize calculates the changes between the specified layer
@@ -124,17 +210,65 @@ func (d *Driver) ApplyDiff(id, parent string, diff io.Reader) (int64, error) {
 // relative to its base filesystem directory.
 func (d *Driver) DiffSize(id, parent string) (size int64, err error) {
 	logrus.Debugf("LCOWDriver DiffSize() id %s parent %s", id, parent)
+	// TODO @gupta-ak. graphdriver.Get() on the parent and then
+	// Have the service vm take the difference between the two files.
 	return 0, nil
 }
 
 // DiffGetter returns a FileGetCloser that can read files from the directory that
 // contains files for the layer differences. Used for direct access for tar-split.
 func (d *Driver) DiffGetter(id string) (graphdriver.FileGetCloser, error) {
+	logrus.Debugf("LCOWDriver DiffGetter() id %s", id)
+	// TODO @gupta-ak. Since we only have a VHD, we need to mount the
+	// VHD to the Service VM. The Service VM can stream a tar file that
+	// we wrap a FileGetCloser interface around.
 	return nil, nil
 }
 
 // GetMetadata returns custom driver information.
 func (d *Driver) GetMetadata(id string) (map[string]string, error) {
 	logrus.Debugf("LCOWDriver GetMetadata() id %s", id)
-	return nil, nil
+	m := make(map[string]string)
+	m["dir"] = d.dir(id)
+	return m, nil
+}
+
+// dir returns the absolute path to the layer.
+func (d *Driver) dir(id string) string {
+	return filepath.Join(d.homeDir, filepath.Base(id))
+}
+
+// getLayerChain returns the layer chain information.
+func (d *Driver) getLayerChain(id string) ([]string, error) {
+	jPath := filepath.Join(d.dir(id), "layerchain.json")
+	content, err := ioutil.ReadFile(jPath)
+	if os.IsNotExist(err) {
+		return nil, nil
+	} else if err != nil {
+		return nil, fmt.Errorf("Unable to read layerchain file - %s", err)
+	}
+
+	var layerChain []string
+	err = json.Unmarshal(content, &layerChain)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to unmarshall layerchain json - %s", err)
+	}
+
+	return layerChain, nil
+}
+
+// setLayerChain stores the layer chain information in disk.
+func (d *Driver) setLayerChain(id string, chain []string) error {
+	content, err := json.Marshal(&chain)
+	if err != nil {
+		return fmt.Errorf("Failed to marshall layerchain json - %s", err)
+	}
+
+	jPath := filepath.Join(d.dir(id), "layerchain.json")
+	err = ioutil.WriteFile(jPath, content, 0600)
+	if err != nil {
+		return fmt.Errorf("Unable to write layerchain file - %s", err)
+	}
+
+	return nil
 }

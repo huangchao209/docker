@@ -311,6 +311,7 @@ func (ls *layerStore) registerWithDescriptor(ts io.Reader, parent ChainID, platf
 			if err := ls.driver.Remove(layer.cacheID); err != nil {
 				logrus.Errorf("Error cleaning up cache layer %s: %v", layer.cacheID, err)
 			}
+
 			if err := tx.Cancel(); err != nil {
 				logrus.Errorf("Error canceling metadata transaction %q: %s", tx.String(), err)
 			}
@@ -396,6 +397,7 @@ func (ls *layerStore) deleteLayer(layer *roLayer, metadata *Metadata) error {
 	if err != nil {
 		return err
 	}
+
 	err = ls.store.Remove(layer.chainID)
 	if err != nil {
 		return err
