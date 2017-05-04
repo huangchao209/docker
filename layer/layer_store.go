@@ -738,5 +738,5 @@ func (n *naiveDiffPathDriver) DiffGetter(id string) (graphdriver.FileGetCloser, 
 	if err != nil {
 		return nil, err
 	}
-	return &fileGetPutter{storage.NewPathFileGetter(p), n.Driver, id}, nil
+	return &fileGetPutter{storage.NewPathFileGetter(p.String()), n.Driver, id}, nil
 }

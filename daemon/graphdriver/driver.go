@@ -46,6 +46,19 @@ type CreateOpts struct {
 // InitFunc initializes the storage driver.
 type InitFunc func(root string, options []string, uidMaps, gidMaps []idtools.IDMap) (Driver, error)
 
+// Mount is the layer mount interface
+type Mount interface {
+	String() string
+}
+
+type DummyMount struct {
+	MountName string
+}
+
+func (d DummyMount) String() string {
+	return d.MountName
+}
+
 // ProtoDriver defines the basic capabilities of a driver.
 // This interface exists solely to be a minimum set of methods
 // for client code which choose not to implement the entire Driver
@@ -68,7 +81,7 @@ type ProtoDriver interface {
 	// Get returns the mountpoint for the layered filesystem referred
 	// to by this id. You can optionally specify a mountLabel or "".
 	// Returns the absolute path to the mounted layered filesystem.
-	Get(id, mountLabel string) (dir string, err error)
+	Get(id, mountLabel string) (mnt Mount, err error)
 	// Put releases the system resources for the specified id,
 	// e.g, unmounting layered filesystem.
 	Put(id string) error

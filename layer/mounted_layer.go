@@ -3,6 +3,7 @@ package layer
 import (
 	"io"
 
+	"github.com/docker/docker/daemon/graphdriver"
 	"github.com/docker/docker/pkg/archive"
 )
 
@@ -88,7 +89,7 @@ type referencedRWLayer struct {
 	*mountedLayer
 }
 
-func (rl *referencedRWLayer) Mount(mountLabel string) (string, error) {
+func (rl *referencedRWLayer) Mount(mountLabel string) (graphdriver.Mount, error) {
 	return rl.layerStore.driver.Get(rl.mountedLayer.mountID, mountLabel)
 }
 

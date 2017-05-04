@@ -59,7 +59,7 @@ func (gdw *NaiveDiffDriver) Diff(id, parent string) (arch io.ReadCloser, err err
 	}()
 
 	if parent == "" {
-		archive, err := archive.Tar(layerFs, archive.Uncompressed)
+		archive, err := archive.Tar(layerFs.String(), archive.Uncompressed)
 		if err != nil {
 			return nil, err
 		}
@@ -76,12 +76,12 @@ func (gdw *NaiveDiffDriver) Diff(id, parent string) (arch io.ReadCloser, err err
 	}
 	defer driver.Put(parent)
 
-	changes, err := archive.ChangesDirs(layerFs, parentFs)
+	changes, err := archive.ChangesDirs(layerFs.String(), parentFs.String())
 	if err != nil {
 		return nil, err
 	}
 
-	archive, err := archive.ExportChanges(layerFs, changes, gdw.uidMaps, gdw.gidMaps)
+	archive, err := archive.ExportChanges(layerFs.String(), changes, gdw.uidMaps, gdw.gidMaps)
 	if err != nil {
 		return nil, err
 	}
@@ -113,14 +113,15 @@ func (gdw *NaiveDiffDriver) Changes(id, parent string) ([]archive.Change, error)
 	parentFs := ""
 
 	if parent != "" {
-		parentFs, err = driver.Get(parent, "")
+		parentFsMount, err := driver.Get(parent, "")
 		if err != nil {
 			return nil, err
 		}
 		defer driver.Put(parent)
+		parentFs = parentFsMount.String()
 	}
 
-	return archive.ChangesDirs(layerFs, parentFs)
+	return archive.ChangesDirs(layerFs.String(), parentFs)
 }
 
 // ApplyDiff extracts the changeset from the given diff into the
@@ -140,7 +141,7 @@ func (gdw *NaiveDiffDriver) ApplyDiff(id, parent string, diff io.Reader) (size i
 		GIDMaps: gdw.gidMaps}
 	start := time.Now().UTC()
 	logrus.Debug("Start untar layer")
-	if size, err = ApplyUncompressedLayer(layerFs, diff, options); err != nil {
+	if size, err = ApplyUncompressedLayer(layerFs.String(), diff, options); err != nil {
 		return
 	}
 	logrus.Debugf("Untar time: %vs", time.Now().UTC().Sub(start).Seconds())
@@ -165,5 +166,5 @@ func (gdw *NaiveDiffDriver) DiffSize(id, parent string) (size int64, err error) 
 	}
 	defer driver.Put(id)
 
-	return archive.ChangesSize(layerFs, changes), nil
+	return archive.ChangesSize(layerFs.String(), changes), nil
 }
