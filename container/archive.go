@@ -5,39 +5,7 @@ import (
 	"path/filepath"
 
 	"github.com/docker/docker/api/types"
-	"github.com/docker/docker/pkg/archive"
-	"github.com/docker/docker/pkg/system"
 )
-
-// ResolvePath resolves the given path in the container to a resource on the
-// host. Returns a resolved path (absolute path to the resource on the host),
-// the absolute path to the resource relative to the container's rootfs, and
-// an error if the path points to outside the container's rootfs.
-func (container *Container) ResolvePath(path string) (resolvedPath, absPath string, err error) {
-	// Check if a drive letter supplied, it must be the system drive. No-op except on Windows
-	path, err = system.CheckSystemDriveAndRemoveDriveLetter(path)
-	if err != nil {
-		return "", "", err
-	}
-
-	// Consider the given path as an absolute path in the container.
-	absPath = archive.PreserveTrailingDotOrSeparator(filepath.Join(string(filepath.Separator), path), path)
-
-	// Split the absPath into its Directory and Base components. We will
-	// resolve the dir in the scope of the container then append the base.
-	dirPath, basePath := filepath.Split(absPath)
-
-	resolvedDirPath, err := container.GetResourcePath(dirPath)
-	if err != nil {
-		return "", "", err
-	}
-
-	// resolvedDirPath will have been cleaned (no trailing path separators) so
-	// we can manually join it with the base path element.
-	resolvedPath = resolvedDirPath + string(filepath.Separator) + basePath
-
-	return resolvedPath, absPath, nil
-}
 
 // StatPath is the unexported version of StatPath. Locks and mounts should
 // be acquired before calling this method and the given path should be fully

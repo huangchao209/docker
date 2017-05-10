@@ -456,11 +456,6 @@ func (container *Container) TmpfsMounts() ([]Mount, error) {
 	return mounts, nil
 }
 
-// cleanResourcePath cleans a resource path and prepares to combine with mnt path
-func cleanResourcePath(path string) string {
-	return filepath.Join(string(os.PathSeparator), path)
-}
-
 // EnableServiceDiscoveryOnDefaultNetwork Enable service discovery on default network
 func (container *Container) EnableServiceDiscoveryOnDefaultNetwork() bool {
 	return false

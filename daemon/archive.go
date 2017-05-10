@@ -12,6 +12,7 @@ import (
 	"github.com/docker/docker/pkg/chrootarchive"
 	"github.com/docker/docker/pkg/idtools"
 	"github.com/docker/docker/pkg/ioutils"
+	"github.com/docker/docker/pkg/pathutils"
 	"github.com/docker/docker/pkg/symlink"
 	"github.com/docker/docker/pkg/system"
 	"github.com/pkg/errors"
@@ -112,7 +113,7 @@ func (daemon *Daemon) containerStatPath(container *container.Container, path str
 		return nil, err
 	}
 
-	resolvedPath, absPath, err := container.ResolvePath(path)
+	resolvedPath, absPath, err := pathutils.EvalScopedPathAbs(path, container.BaseFS)
 	if err != nil {
 		return nil, err
 	}
@@ -152,7 +153,7 @@ func (daemon *Daemon) containerArchivePath(container *container.Container, path 
 		return nil, nil, err
 	}
 
-	resolvedPath, absPath, err := container.ResolvePath(path)
+	resolvedPath, absPath, err := pathutils.EvalScopedPathAbs(path, container.BaseFS)
 	if err != nil {
 		return nil, nil, err
 	}
