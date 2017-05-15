@@ -4,10 +4,10 @@ import (
 	"archive/tar"
 	"io"
 	"os"
-	"path/filepath"
 
 	"github.com/Sirupsen/logrus"
 	"github.com/docker/docker/pkg/archive"
+	"github.com/docker/docker/pkg/scopedpath"
 )
 
 // @gupta-ak. TODO: Implement this
@@ -76,6 +76,6 @@ func (rfs *remotefs) Lstat(name string) (os.FileInfo, error) {
 	return os.Lstat(rfs.dummyPath)
 }
 
-func (rfs *remotefs) AbsPath(name string) string {
-	return archive.PreserveTrailingDotOrSeparator(filepath.Join(string(filepath.Separator), name), name)
+func (rfs *remotefs) ResolvePath(name string) (string, string, error) {
+	return scopedpath.EvalScopedPathAbs(name, rfs.dummyPath)
 }

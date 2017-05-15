@@ -9,11 +9,6 @@ import (
 	"github.com/docker/docker/pkg/archive"
 )
 
-// ErrExtractPointNotDirectory is used to convey that the operation to extract
-// a tar archive to a directory in a container has failed because the specified
-// path does not refer to a directory.
-var ErrExtractPointNotDirectory = errors.New("extraction point is not a directory")
-
 // ErrNotSymlink is used by Readlink to indicate that the given path was not
 // a symlink
 var ErrNotSymlink = errors.New("Not a symlink: %s")
@@ -47,9 +42,8 @@ type FilesystemOperator interface {
 	Stat(name string) (os.FileInfo, error)
 	Lstat(name string) (os.FileInfo, error)
 
-	// AbsPath returns the absolute path of the given string in scope of the
-	// container.
-	AbsPath(name string) string
+	// ResolvePath resolves the path in the respective to the host.
+	ResolvePath(name string) (string, string, error)
 
 	// WriteFile(filename string, data []byte, perm os.FileMode) error
 	//Mkdir(name string, perm FileMode) error

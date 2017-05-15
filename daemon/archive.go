@@ -14,8 +14,16 @@ import (
 	"github.com/docker/docker/pkg/chrootarchive"
 	"github.com/docker/docker/pkg/idtools"
 	"github.com/docker/docker/pkg/ioutils"
+	"github.com/docker/docker/pkg/pathutils"
 	"github.com/docker/docker/pkg/symlink"
+	"github.com/docker/docker/pkg/system"
+	"github.com/pkg/errors"
 )
+
+// ErrExtractPointNotDirectory is used to convey that the operation to extract
+// a tar archive to a directory in a container has failed because the specified
+// path does not refer to a directory.
+var ErrExtractPointNotDirectory = errors.New("extraction point is not a directory")
 
 // ContainerCopy performs a deprecated operation of archiving the resource at
 // the specified path in the container identified by the given name.
@@ -166,16 +174,32 @@ func (daemon *Daemon) containerArchivePath(container *container.Container, path 
 		return nil, nil, err
 	}
 
+	osType, err := daemon.getContainerOS(container)
+	if err != nil {
+		return nil, nil, err
+	}
+
 	stat, err = containerStatPathNoLock(container, path)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	opts := &archive.TarOptions{
-		Compression:      archive.Uncompressed,
-		IncludeSourceDir: true,
-	}
 	placeholderGuptaAk := fs.NewFilesystemOperator(false, container.BaseFS)
+	resolvedPath, absPath, err := placeholderGuptaAk.ResolvePath(path)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// We need to rebase the archive entries if the last element of the
+	// resolved path was a symlink that was evaluated and is now different
+	// than the requested path. For example, if the given path was "/foo/bar/",
+	// but it resolved to "/var/lib/docker/containers/{id}/foo/baz/", we want
+	// to ensure that the archive entries start with "bar" and not "baz". This
+	// also catches the case when the root directory of the container is
+	// requested: we want the archive entries to start with "/" and not the
+	// container ID.
+	_, opts := archive.TarResourceRebaseOpts(resolvedPath, pathutils.Base(absPath, osType), osType)
+
 	data, err := placeholderGuptaAk.ArchivePath(path, opts)
 	if err != nil {
 		return nil, nil, err
@@ -215,6 +239,89 @@ func (daemon *Daemon) containerExtractToDir(container *container.Container, path
 		return err
 	}
 
+	osType, err := daemon.getContainerOS(container)
+	if err != nil {
+		return err
+	}
+
+	placeholderGuptaAk := fs.NewFilesystemOperator(false, container.BaseFS)
+
+	// Check if a drive letter supplied, it must be the system drive. No-op except on Windows
+	path, err = system.CheckSystemDriveAndRemoveDriveLetterOS(path, osType)
+	if err != nil {
+		return err
+	}
+
+	// The destination path needs to be resolved to a host path, with all
+	// symbolic links followed in the scope of the container's rootfs. Note
+	// that we do not use `container.ResolvePath(path)` here because we need
+	// to also evaluate the last path element if it is a symlink. This is so
+	// that you can extract an archive to a symlink that points to a directory.
+
+	// Consider the given path as an absolute path in the container.
+	cleanedPath := pathutils.Join(string(pathutils.Separator(osType)), path, osType)
+	absPath := archive.PreserveTrailingDotOrSeparatorOS(cleanedPath, path, osType)
+
+	stat, err := placeholderGuptaAk.Lstat(absPath)
+	if err != nil {
+		return err
+	}
+
+	if !stat.IsDir() {
+		return ErrExtractPointNotDirectory
+	}
+
+	// Need to check if the path is in a volume. If it is, it cannot be in a
+	// read-only volume. If it is not in a volume, the container cannot be
+	// configured with a read-only rootfs.
+	//
+	// Use the resolved path relative to the container rootfs as the new
+	// absPath. This way we fully follow any symlinks in a volume that may
+	// lead back outside the volume.
+	//
+	// The Windows implementation of filepath.Rel in golang 1.4 does not
+	// support volume style file path semantics. On Windows when using the
+	// filter driver, we are guaranteed that the path will always be
+	// a volume file path.
+	resolvedPath, absPath, err := placeholderGuptaAk.ResolvePath(path)
+	if err != nil {
+		return err
+	}
+
+	var baseRel string
+	if strings.HasPrefix(resolvedPath, `\\?\Volume{`) {
+		if strings.HasPrefix(resolvedPath, container.BaseFS) {
+			baseRel = resolvedPath[len(container.BaseFS):]
+			if baseRel[:1] == `\` {
+				baseRel = baseRel[1:]
+			}
+		}
+	} else {
+		baseRel, err = pathutils.Rel(container.BaseFS, resolvedPath, osType)
+	}
+	if err != nil {
+		return err
+	}
+	// Make it an absolute path.
+	absPath = pathutils.Join(string(pathutils.Separator(osType)), baseRel)
+
+	// Windows doesn't support copying from a voluem and non Windows platforms
+	// do not support remote container fs, so right now, we can assume
+	// that it's a local file system.
+	// TODO @gupta-ak: Once Windows supports it, we would need to change the
+	// functions to understand Windows/Linux OS
+	var toVolume bool
+	if !placeholderGuptaAk.Remote() {
+		toVolume, err = checkIfPathIsInAVolume(container, absPath)
+		if err != nil {
+			return err
+		}
+	}
+
+	if !toVolume && container.HostConfig.ReadonlyRootfs {
+		return ErrRootFSReadOnly
+	}
+
 	options := daemon.defaultTarCopyOptions(noOverwriteDirNonDir)
 	if copyUIDGID {
 		var err error
@@ -223,27 +330,6 @@ func (daemon *Daemon) containerExtractToDir(container *container.Container, path
 		options, err = daemon.tarCopyOptions(container, noOverwriteDirNonDir)
 		if err != nil {
 			return err
-		}
-	}
-
-	placeholderGuptaAk := fs.NewFilesystemOperator(false, container.BaseFS)
-
-	// TODO @gupta-ak. Think of what to do with volume mounts
-	// Right now, fail the if the rootfs is readonly + remote
-	if placeholderGuptaAk.Remote() {
-		if container.HostConfig.ReadonlyRootfs {
-			return ErrRootFSReadOnly
-		}
-	} else {
-		absPath := placeholderGuptaAk.AbsPath(path)
-
-		toVolume, err := checkIfPathIsInAVolume(container, absPath)
-		if err != nil {
-			return err
-		}
-
-		if !toVolume && container.HostConfig.ReadonlyRootfs {
-			return ErrRootFSReadOnly
 		}
 	}
 
@@ -285,11 +371,35 @@ func (daemon *Daemon) containerCopy(container *container.Container, resource str
 		return nil, err
 	}
 
-	placeholderGuptaAk := fs.NewFilesystemOperator(false, container.BaseFS)
-	opts := &archive.TarOptions{
-		Compression: archive.Uncompressed,
+	osType, err := daemon.getContainerOS(container)
+	if err != nil {
+		return nil, err
 	}
-	archive, err := placeholderGuptaAk.ArchivePath(resource, opts)
+
+	placeholderGuptaAk := fs.NewFilesystemOperator(false, container.BaseFS)
+	basePath, _, err := placeholderGuptaAk.ResolvePath(resource)
+	if err != nil {
+		return nil, err
+	}
+
+	stat, err := placeholderGuptaAk.Stat(resource)
+	if err != nil {
+		return nil, err
+	}
+	var filter []string
+	if !stat.IsDir() {
+		d, f := pathutils.Split(basePath, osType)
+		basePath = d
+		filter = []string{f}
+	} else {
+		filter = []string{pathutils.Base(basePath, osType)}
+		basePath = pathutils.Dir(basePath, osType)
+	}
+	archive, err := placeholderGuptaAk.ArchivePath(basePath, &archive.TarOptions{
+		Compression:  archive.Uncompressed,
+		IncludeFiles: filter,
+	})
+
 	if err != nil {
 		return nil, err
 	}
@@ -334,21 +444,28 @@ func (daemon *Daemon) CopyOnBuild(cID, destPath, srcRoot, srcPath string, decomp
 	}
 	defer daemon.Unmount(c)
 
-	dest, err := c.GetResourcePath(destPath)
+	osType, err := daemon.getContainerOS(c)
 	if err != nil {
 		return err
 	}
 
+	placeholderGuptaAk := fs.NewFilesystemOperator(false, c.BaseFS)
+	dest, _, err := placeholderGuptaAk.ResolvePath(destPath)
+
+	// Work in image OS specific file paths
+	destPath = pathutils.NormalizePath(destPath, osType)
+	separator := pathutils.Separator(osType)
+
 	// Preserve the trailing slash
 	// TODO: why are we appending another path separator if there was already one?
-	if strings.HasSuffix(destPath, string(os.PathSeparator)) || destPath == "." {
+	if strings.HasSuffix(destPath, string(separator)) || destPath == "." {
 		destDir = true
-		dest += string(os.PathSeparator)
+		dest += string(separator)
 	}
 
 	destPath = dest
 
-	destStat, err := os.Stat(destPath)
+	destStat, err := placeholderGuptaAk.Stat(destPath)
 	if err != nil {
 		if !os.IsNotExist(err) {
 			//logrus.Errorf("Error performing os.Stat on %s. %s", destPath, err)
@@ -384,8 +501,8 @@ func (daemon *Daemon) CopyOnBuild(cID, destPath, srcRoot, srcPath string, decomp
 		// because tar is very forgiving.  First we need to strip off the archive's
 		// filename from the path but this is only added if it does not end in slash
 		tarDest := destPath
-		if strings.HasSuffix(tarDest, string(os.PathSeparator)) {
-			tarDest = filepath.Dir(destPath)
+		if strings.HasSuffix(tarDest, string(separator)) {
+			tarDest = pathutils.Dir(destPath, osType)
 		}
 
 		// try to successfully untar the orig
@@ -400,10 +517,10 @@ func (daemon *Daemon) CopyOnBuild(cID, destPath, srcRoot, srcPath string, decomp
 
 	// only needed for fixPermissions, but might as well put it before CopyFileWithTar
 	if destDir || (destExists && destStat.IsDir()) {
-		destPath = filepath.Join(destPath, filepath.Base(srcPath))
+		destPath = pathutils.Join(destPath, pathutils.Base(srcPath, osType), osType)
 	}
 
-	if err := idtools.MkdirAllNewAs(filepath.Dir(destPath), 0755, rootUID, rootGID); err != nil {
+	if err := idtools.MkdirAllNewAs(pathutils.Dir(destPath, osType), 0755, rootUID, rootGID); err != nil {
 		return err
 	}
 	if err := archiver.CopyFileWithTar(fullSrcPath, destPath); err != nil {

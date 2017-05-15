@@ -1,6 +1,6 @@
 // +build linux freebsd solaris
 
-package pathutils
+package scopedpath
 
 import (
 	"os"

@@ -7,9 +7,11 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/Sirupsen/logrus"
+	"github.com/docker/docker/pkg/pathutils"
 	"github.com/docker/docker/pkg/system"
 )
 
@@ -29,21 +31,28 @@ var (
 // path already ends in a `.` path segment, then another is not added. If the
 // clean path already ends in a path separator, then another is not added.
 func PreserveTrailingDotOrSeparator(cleanedPath, originalPath string) string {
-	// Ensure paths are in platform semantics
-	cleanedPath = normalizePath(cleanedPath)
-	originalPath = normalizePath(originalPath)
+	return PreserveTrailingDotOrSeparatorOS(cleanedPath, originalPath, runtime.GOOS)
+}
 
-	if !specifiesCurrentDir(cleanedPath) && specifiesCurrentDir(originalPath) {
-		if !hasTrailingPathSeparator(cleanedPath) {
+// PreserveTrailingDotOrSeparatorOS works the same way as PreserveTrailingDotOrSeperator,
+// but can modify Linux paths on Windows and vice versa.
+func PreserveTrailingDotOrSeparatorOS(cleanedPath, originalPath, osType string) string {
+	// Ensure paths are in platform semantics
+	cleanedPath = pathutils.NormalizePath(cleanedPath, osType)
+	originalPath = pathutils.NormalizePath(originalPath, osType)
+	sep := pathutils.Separator(osType)
+
+	if !specifiesCurrentDirOS(cleanedPath, osType) && specifiesCurrentDirOS(originalPath, osType) {
+		if !hasTrailingPathSeparatorOS(cleanedPath, osType) {
 			// Add a separator if it doesn't already end with one (a cleaned
 			// path would only end in a separator if it is the root).
-			cleanedPath += string(filepath.Separator)
+			cleanedPath += string(sep)
 		}
 		cleanedPath += "."
 	}
 
-	if !hasTrailingPathSeparator(cleanedPath) && hasTrailingPathSeparator(originalPath) {
-		cleanedPath += string(filepath.Separator)
+	if !hasTrailingPathSeparatorOS(cleanedPath, osType) && hasTrailingPathSeparatorOS(originalPath, osType) {
+		cleanedPath += string(sep)
 	}
 
 	return cleanedPath
@@ -53,32 +62,59 @@ func PreserveTrailingDotOrSeparator(cleanedPath, originalPath string) string {
 // asserted to be a directory, i.e., the path ends with
 // a trailing '/' or `/.`, assuming a path separator of `/`.
 func assertsDirectory(path string) bool {
-	return hasTrailingPathSeparator(path) || specifiesCurrentDir(path)
+	return assertsDirectoryOS(path, runtime.GOOS)
+}
+
+// assertsDirectoryOS returns whether the given path is
+// asserted to be a directory, i.e., the path ends with
+// a trailing '/' or `/.`, assuming a path separator of `/`.
+func assertsDirectoryOS(path string, osType string) bool {
+	return hasTrailingPathSeparatorOS(path, runtime.GOOS) || specifiesCurrentDirOS(path, runtime.GOOS)
 }
 
 // hasTrailingPathSeparator returns whether the given
 // path ends with the system's path separator character.
 func hasTrailingPathSeparator(path string) bool {
-	return len(path) > 0 && os.IsPathSeparator(path[len(path)-1])
+	return hasTrailingPathSeparatorOS(path, runtime.GOOS)
+}
+
+// hasTrailingPathSeperatorOS returns whether the given
+// path ends with the osseparator character.
+func hasTrailingPathSeparatorOS(path string, osType string) bool {
+	separator := pathutils.Separator(osType)
+	return len(path) > 0 && path[len(path)-1] == separator
 }
 
 // specifiesCurrentDir returns whether the given path specifies
 // a "current directory", i.e., the last path segment is `.`.
 func specifiesCurrentDir(path string) bool {
-	return filepath.Base(path) == "."
+	return specifiesCurrentDirOS(path, runtime.GOOS)
+}
+
+// specifiesCurrentDirOS is specifiesCurrentDir, but calls the os agnostic
+// filepath library called pathutils.
+func specifiesCurrentDirOS(path, osType string) bool {
+	return pathutils.Base(path, osType) == "."
 }
 
 // SplitPathDirEntry splits the given path between its directory name and its
 // basename by first cleaning the path but preserves a trailing "." if the
 // original path specified the current directory.
 func SplitPathDirEntry(path string) (dir, base string) {
-	cleanedPath := filepath.Clean(normalizePath(path))
+	return SplitPathDirEntryOS(path, runtime.GOOS)
+}
 
-	if specifiesCurrentDir(path) {
-		cleanedPath += string(filepath.Separator) + "."
+// SplitPathDirEntryOS splits the given path between its directory name and its
+// basename by first cleaning the path but preserves a trailing "." if the
+// original path specified the current directory.
+func SplitPathDirEntryOS(path, osType string) (dir, base string) {
+	cleanedPath := pathutils.Clean(pathutils.NormalizePath(path, osType), osType)
+
+	if specifiesCurrentDirOS(path, osType) {
+		cleanedPath += string(pathutils.Separator(osType)) + "."
 	}
 
-	return filepath.Dir(cleanedPath), filepath.Base(cleanedPath)
+	return pathutils.Dir(cleanedPath, osType), pathutils.Base(cleanedPath, osType)
 }
 
 // TarResource archives the resource described by the given CopyInfo to a Tar
@@ -103,22 +139,32 @@ func TarResourceRebase(sourcePath, rebaseName string) (content io.ReadCloser, er
 		return
 	}
 
+	sourceDir, opts := TarResourceRebaseOpts(sourcePath, rebaseName, runtime.GOOS)
+
+	logrus.Debugf("copying %v from %q", opts.IncludeFiles, sourceDir)
+
+	return TarWithOptions(sourceDir, opts)
+}
+
+// TarResourceRebaseOpts does not preform the Tar, but instead just creates the parameters
+// to be sent to TarWithOptions (the source directory and the TarOptions struct)
+func TarResourceRebaseOpts(sourcePath, rebaseName, osType string) (string, *TarOptions) {
+	sourcePath = pathutils.NormalizePath(sourcePath, osType)
+
 	// Separate the source path between its directory and
 	// the entry in that directory which we are archiving.
-	sourceDir, sourceBase := SplitPathDirEntry(sourcePath)
+	sourceDir, sourceBase := SplitPathDirEntryOS(sourcePath, osType)
 
 	filter := []string{sourceBase}
 
-	logrus.Debugf("copying %q from %q", sourceBase, sourceDir)
-
-	return TarWithOptions(sourceDir, &TarOptions{
+	return sourceDir, &TarOptions{
 		Compression:      Uncompressed,
 		IncludeFiles:     filter,
 		IncludeSourceDir: true,
 		RebaseNames: map[string]string{
 			sourceBase: rebaseName,
 		},
-	})
+	}
 }
 
 // CopyInfo holds basic info about the source

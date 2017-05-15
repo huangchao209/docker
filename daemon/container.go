@@ -312,3 +312,16 @@ func (daemon *Daemon) verifyContainerSettings(hostConfig *containertypes.HostCon
 	// Now do platform-specific verification
 	return verifyPlatformContainerSettings(daemon, hostConfig, config, update)
 }
+
+func (daemon *Daemon) getContainerOS(container *container.Container) (string, error) {
+	img, err := daemon.imageStore.Get(container.ImageID)
+	if err != nil {
+		return "", err
+	}
+
+	osType := runtime.GOOS
+	if img.OS != "" {
+		osType = img.OS
+	}
+	return osType, nil
+}

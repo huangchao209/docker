@@ -1,6 +1,6 @@
 // +build windows
 
-package pathutils
+package scopedpath
 
 import (
 	"os"

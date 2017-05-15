@@ -32,7 +32,7 @@ import (
 	"github.com/docker/docker/opts"
 	"github.com/docker/docker/pkg/idtools"
 	"github.com/docker/docker/pkg/ioutils"
-	"github.com/docker/docker/pkg/pathutils"
+	"github.com/docker/docker/pkg/scopedpath"
 	"github.com/docker/docker/pkg/signal"
 	"github.com/docker/docker/restartmanager"
 	"github.com/docker/docker/runconfig"
@@ -274,7 +274,7 @@ func (container *Container) SetupWorkingDirectory(rootUID, rootGID int) error {
 func (container *Container) GetResourcePath(path string) (string, error) {
 	// IMPORTANT - These are paths on the OS where the daemon is running, hence
 	// any filepath operations must be done in an OS agnostic way.
-	r, e := pathutils.EvalScopedPath(path, container.BaseFS)
+	r, e := scopedpath.EvalScopedPath(path, container.BaseFS)
 
 	// Log this here on the daemon side as there's otherwise no indication apart
 	// from the error being propagated all the way back to the client. This makes
@@ -300,7 +300,7 @@ func (container *Container) GetResourcePath(path string) (string, error) {
 func (container *Container) GetRootResourcePath(path string) (string, error) {
 	// IMPORTANT - These are paths on the OS where the daemon is running, hence
 	// any filepath operations must be done in an OS agnostic way.
-	return pathutils.EvalScopedPath(path, container.Root)
+	return scopedpath.EvalScopedPath(path, container.Root)
 }
 
 // ExitOnNext signals to the monitor that it should not restart the container
