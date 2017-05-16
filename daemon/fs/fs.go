@@ -17,7 +17,7 @@ type FilesystemOperator interface {
 	// Remote returns true if the file system is remote. false otherwise.
 	Remote() bool
 
-	// Returns the path on the host if the file system is local. Meaningless if file system is remote.
+	// Returns the path on the host if the file system is local.
 	HostPathName() string
 
 	// ExtractArchive takes in an archive and extracts it to the given path.
@@ -42,8 +42,8 @@ type FilesystemOperator interface {
 	Stat(name string) (os.FileInfo, error)
 	Lstat(name string) (os.FileInfo, error)
 
-	// ResolvePath resolves the path in the respective to the host.
 	ResolvePath(name string) (string, string, error)
+	GetResourcePath(name string) (string, error)
 
 	// WriteFile(filename string, data []byte, perm os.FileMode) error
 	//Mkdir(name string, perm FileMode) error

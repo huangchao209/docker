@@ -21,7 +21,7 @@ func (rfs *remotefs) Remote() bool {
 }
 
 func (rfs *remotefs) HostPathName() string {
-	return ""
+	return rfs.dummyPath
 }
 
 func (rfs *remotefs) ExtractArchive(input io.Reader, path string, options *archive.TarOptions) error {
@@ -68,14 +68,26 @@ func (rfs *remotefs) Readlink(name string) (string, error) {
 
 func (rfs *remotefs) Stat(name string) (os.FileInfo, error) {
 	logrus.Debugln("LCOW: remotefs.Stat(). Not implemented yet.")
-	return os.Stat(rfs.dummyPath)
+	name, body := "readme.txt", "This archive contains some text files."
+	hdr := &tar.Header{
+		Name: name,
+		Mode: 0600,
+		Size: int64(len(body)),
+	}
+	return hdr.FileInfo(), nil
 }
 
 func (rfs *remotefs) Lstat(name string) (os.FileInfo, error) {
 	logrus.Debugln("LCOW: remotefs.Lstat(). Not implemented yet.")
-	return os.Lstat(rfs.dummyPath)
+	return rfs.Stat(name)
 }
 
 func (rfs *remotefs) ResolvePath(name string) (string, string, error) {
+	logrus.Debugln("LCOW: remotefs.ResolvePath(). Not implemented yet.")
 	return scopedpath.EvalScopedPathAbs(name, rfs.dummyPath)
+}
+
+func (rfs *remotefs) GetResourcePath(name string) (string, error) {
+	logrus.Debugln("LCOW: remotefs.GetResourcePath(). Not implemented yet.")
+	return scopedpath.EvalScopedPath(name, rfs.dummyPath)
 }

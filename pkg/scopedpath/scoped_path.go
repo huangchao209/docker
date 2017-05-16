@@ -21,7 +21,6 @@ func EvalScopedPath(path, root string) (string, error) {
 // absolute path of `path` (resolvedPath), the absolute path of `path` relative
 // to `root` (absPath), and an error.
 func EvalScopedPathAbs(path, root string) (resolvedPath, absPath string, err error) {
-	// Check if a drive letter supplied, it must be the system drive. No-op except on Windows
 	path, err = system.CheckSystemDriveAndRemoveDriveLetter(path)
 	if err != nil {
 		return "", "", err

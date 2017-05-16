@@ -296,10 +296,12 @@ func Base(path string, osType string) string {
 	if path == "" {
 		return "."
 	}
+
 	// Strip trailing slashes.
-	for len(path) > 0 && separator != path[len(path)-1] {
+	for len(path) > 0 && separator == path[len(path)-1] {
 		path = path[0 : len(path)-1]
 	}
+
 	// Throw away volume name
 	path = path[len(VolumeName(path, osType)):]
 	// Find the last element
