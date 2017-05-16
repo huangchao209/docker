@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/Sirupsen/logrus"
@@ -77,15 +78,25 @@ func (daemon *Daemon) SystemInfo() (*types.Info, error) {
 		securityOptions = append(securityOptions, "name=userns")
 	}
 
+	imageCount := 0
+	drivers := ""
+	for platform, ds := range daemon.stores {
+		imageCount += len(ds.imageStore.Map())
+		drivers += daemon.GraphDriverName(platform)
+		if len(daemon.stores) > 1 {
+			drivers += fmt.Sprintf(" (%s) ", platform)
+		}
+	}
+	drivers = strings.TrimSpace(drivers)
 	v := &types.Info{
 		ID:                 daemon.ID,
 		Containers:         int(cRunning + cPaused + cStopped),
 		ContainersRunning:  int(cRunning),
 		ContainersPaused:   int(cPaused),
 		ContainersStopped:  int(cStopped),
-		Images:             len(daemon.imageStore.Map()),
-		Driver:             daemon.GraphDriverName(),
-		DriverStatus:       daemon.layerStore.DriverStatus(),
+		Images:             imageCount,
+		Driver:             drivers,
+		DriverStatus:       daemon.stores[runtime.GOOS].layerStore.DriverStatus(), // TODO LCOW @jhowardmsft - use all stores
 		Plugins:            daemon.showPluginsInfo(),
 		IPv4Forwarding:     !sysInfo.IPv4ForwardingDisabled,
 		BridgeNfIptables:   !sysInfo.BridgeNFCallIPTablesDisabled,

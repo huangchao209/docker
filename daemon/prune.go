@@ -3,6 +3,7 @@ package daemon
 import (
 	"fmt"
 	"regexp"
+	"runtime"
 	"sync/atomic"
 	"time"
 
@@ -157,6 +158,12 @@ func (daemon *Daemon) VolumesPrune(ctx context.Context, pruneFilters filters.Arg
 
 // ImagesPrune removes unused images
 func (daemon *Daemon) ImagesPrune(ctx context.Context, pruneFilters filters.Args) (*types.ImagesPruneReport, error) {
+
+	// ------------------------------------------------------------------------------
+	// TODO @jhowardmsft LCOW. For now, use just the store for the host OS. This will
+	// need additional work to complete for all stores.
+	// ------------------------------------------------------------------------------
+
 	if !atomic.CompareAndSwapInt32(&daemon.pruneRunning, 0, 1) {
 		return nil, ErrPruneRunning
 	}
@@ -186,9 +193,9 @@ func (daemon *Daemon) ImagesPrune(ctx context.Context, pruneFilters filters.Args
 
 	var allImages map[image.ID]*image.Image
 	if danglingOnly {
-		allImages = daemon.imageStore.Heads()
+		allImages = daemon.stores[runtime.GOOS].imageStore.Heads() // TODO @jhowardmsft LCOW
 	} else {
-		allImages = daemon.imageStore.Map()
+		allImages = daemon.stores[runtime.GOOS].imageStore.Map() // TODO @jhowardmsft LCOW
 	}
 	allContainers := daemon.List()
 	imageRefs := map[string]bool{}
@@ -202,7 +209,7 @@ func (daemon *Daemon) ImagesPrune(ctx context.Context, pruneFilters filters.Args
 	}
 
 	// Filter intermediary images and get their unique size
-	allLayers := daemon.layerStore.Map()
+	allLayers := daemon.stores[runtime.GOOS].layerStore.Map() // TODO @jhowardmsft LCOW
 	topImages := map[image.ID]*image.Image{}
 	for id, img := range allImages {
 		select {
@@ -210,7 +217,8 @@ func (daemon *Daemon) ImagesPrune(ctx context.Context, pruneFilters filters.Args
 			return nil, ctx.Err()
 		default:
 			dgst := digest.Digest(id)
-			if len(daemon.referenceStore.References(dgst)) == 0 && len(daemon.imageStore.Children(id)) != 0 {
+			// // TODO @jhowardmsft LCOW on next line
+			if len(daemon.stores[runtime.GOOS].referenceStore.References(dgst)) == 0 && len(daemon.stores[runtime.GOOS].imageStore.Children(id)) != 0 {
 				continue
 			}
 			if !until.IsZero() && img.Created.After(until) {
@@ -241,7 +249,7 @@ deleteImagesLoop:
 		}
 
 		deletedImages := []types.ImageDeleteResponseItem{}
-		refs := daemon.referenceStore.References(dgst)
+		refs := daemon.stores[runtime.GOOS].referenceStore.References(dgst) // TODO @jhowardmsft LCOW
 		if len(refs) > 0 {
 			shouldDelete := !danglingOnly
 			if !shouldDelete {

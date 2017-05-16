@@ -29,31 +29,33 @@ func (d *Daemon) dumpDaemon(dir string) (string, error) {
 	defer f.Close()
 
 	dump := struct {
-		containers      interface{}
-		names           interface{}
-		links           interface{}
-		execs           interface{}
-		volumes         interface{}
-		images          interface{}
-		layers          interface{}
-		imageReferences interface{}
-		downloads       interface{}
-		uploads         interface{}
-		registry        interface{}
-		plugins         interface{}
+		containers interface{}
+		names      interface{}
+		links      interface{}
+		execs      interface{}
+		volumes    interface{}
+		// TODO @jhowardmsft LCOW - this needs revisiting
+		//images          interface{}
+		//layers          interface{}
+		//imageReferences interface{}
+		downloads interface{}
+		uploads   interface{}
+		registry  interface{}
+		plugins   interface{}
 	}{
-		containers:      d.containers,
-		execs:           d.execCommands,
-		volumes:         d.volumes,
-		images:          d.imageStore,
-		layers:          d.layerStore,
-		imageReferences: d.referenceStore,
-		downloads:       d.downloadManager,
-		uploads:         d.uploadManager,
-		registry:        d.RegistryService,
-		plugins:         d.PluginStore,
-		names:           d.nameIndex,
-		links:           d.linkIndex,
+		containers: d.containers,
+		execs:      d.execCommands,
+		volumes:    d.volumes,
+		// TODO @jhowardmsft LCOW - this needs revisiting
+		//images:          d.imageStore,
+		//layers:          d.layerStore,
+		//imageReferences: d.referenceStore,
+		downloads: d.downloadManager,
+		uploads:   d.uploadManager,
+		registry:  d.RegistryService,
+		plugins:   d.PluginStore,
+		names:     d.nameIndex,
+		links:     d.linkIndex,
 	}
 
 	spew.Fdump(f, dump) // Does not return an error

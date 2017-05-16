@@ -3,6 +3,7 @@ package build
 import (
 	"fmt"
 	"io"
+	"runtime"
 
 	"github.com/docker/distribution/reference"
 	"github.com/docker/docker/image"
@@ -33,7 +34,8 @@ func NewTagger(backend ImageComponent, stdout io.Writer, names []string) (*Tagge
 // TagImages creates image tags for the imageID
 func (bt *Tagger) TagImages(imageID image.ID) error {
 	for _, rt := range bt.repoAndTags {
-		if err := bt.imageComponent.TagImageWithReference(imageID, rt); err != nil {
+		// TODO @jhowardmsft LCOW support - for now using the runtime OS. Revisit when getting builder working.
+		if err := bt.imageComponent.TagImageWithReference(imageID, runtime.GOOS, rt); err != nil {
 			return err
 		}
 		fmt.Fprintf(bt.stdout, "Successfully tagged %s\n", reference.FamiliarString(rt))
