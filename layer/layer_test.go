@@ -81,6 +81,7 @@ func newTestStore(t *testing.T) (Store, string, func()) {
 	}
 }
 
+// TODO: @gupta-ak. Change this for the remote fs.
 type layerInit func(root string) error
 
 func createLayer(ls Store, parent ChainID, layerFunc layerInit) (Layer, error) {
@@ -90,10 +91,13 @@ func createLayer(ls Store, parent ChainID, layerFunc layerInit) (Layer, error) {
 		return nil, err
 	}
 
-	path, err := mount.Mount("")
+	pathFS, err := mount.Mount("")
 	if err != nil {
 		return nil, err
 	}
+
+	// TODO: @gupta-ak. Change this for the remote fs. Assume it's local for now.
+	path := pathFS.HostPathName()
 
 	if err := layerFunc(path); err != nil {
 		return nil, err
@@ -282,10 +286,16 @@ func TestMountAndRegister(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	path2, err := mount2.Mount("")
+	path2FS, err := mount2.Mount("")
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	// TODO @gupta-ak. Implement this for the remote file system.
+	if path2FS.Remote() {
+		t.Skip("Remote file system not supported")
+	}
+	path2 := path2FS.HostPathName()
 
 	b, err := ioutil.ReadFile(filepath.Join(path2, "testfile.txt"))
 	if err != nil {
@@ -390,10 +400,16 @@ func TestStoreRestore(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	path, err := m.Mount("")
+	pathFS, err := m.Mount("")
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	// TODO @gupta-ak. Implement this for the remote file system.
+	if pathFS.Remote() {
+		t.Skip("Remote file system not supported")
+	}
+	path := pathFS.HostPathName()
 
 	if err := ioutil.WriteFile(filepath.Join(path, "testfile.txt"), []byte("nothing here"), 0644); err != nil {
 		t.Fatal(err)
@@ -427,17 +443,24 @@ func TestStoreRestore(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// TODO @gupta-ak. Implement this for the remote file system.
 	if mountPath, err := m2.Mount(""); err != nil {
 		t.Fatal(err)
-	} else if path != mountPath {
-		t.Fatalf("Unexpected path %s, expected %s", mountPath, path)
+	} else if mountPath.Remote() {
+		t.Skip("Remote file system not supported")
+	} else if path != mountPath.HostPathName() {
+		t.Fatalf("Unexpected path %s, expected %s", mountPath.HostPathName(), path)
 	}
 
+	// TODO @gupta-ak. Implement this for the remote file system.
 	if mountPath, err := m2.Mount(""); err != nil {
 		t.Fatal(err)
-	} else if path != mountPath {
-		t.Fatalf("Unexpected path %s, expected %s", mountPath, path)
+	} else if mountPath.Remote() {
+		t.Skip("Remote file system not supported")
+	} else if path != mountPath.HostPathName() {
+		t.Fatalf("Unexpected path %s, expected %s", mountPath.HostPathName(), path)
 	}
+
 	if err := m2.Unmount(); err != nil {
 		t.Fatal(err)
 	}
@@ -504,10 +527,16 @@ func TestTarStreamStability(t *testing.T) {
 	}
 
 	// hack layer to add file
-	p, err := ls.(*layerStore).driver.Get(layer1.(*referencedCacheLayer).cacheID, "")
+	pFS, err := ls.(*layerStore).driver.Get(layer1.(*referencedCacheLayer).cacheID, "")
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	// TODO: @gupta-ak. Implement this for the remote file system
+	if pFS.Remote() {
+		t.Skip("remote file system unsupported")
+	}
+	p := pFS.HostPathName()
 
 	if err := addedFile.ApplyFile(p); err != nil {
 		t.Fatal(err)

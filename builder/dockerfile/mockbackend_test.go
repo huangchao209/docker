@@ -9,6 +9,7 @@ import (
 	"github.com/docker/docker/api/types/backend"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/builder"
+	"github.com/docker/docker/daemon/fs"
 	"github.com/docker/docker/image"
 	"golang.org/x/net/context"
 )
@@ -103,6 +104,6 @@ func (l *mockLayer) Release() error {
 	return nil
 }
 
-func (l *mockLayer) Mount() (string, error) {
-	return "mountPath", nil
+func (l *mockLayer) Mount() (fs.FilesystemOperator, error) {
+	return fs.NewFilesystemOperator(false, "mountPath"), nil
 }

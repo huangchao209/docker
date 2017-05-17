@@ -30,11 +30,17 @@ func randomContent(size int, seed int64) []byte {
 }
 
 func addFiles(drv graphdriver.Driver, layer string, seed int64) error {
-	root, err := drv.Get(layer, "")
+	rootFS, err := drv.Get(layer, "")
 	if err != nil {
 		return err
 	}
 	defer drv.Put(layer)
+
+	// TODO @gupta-ak. Implement this for the remote file system.
+	if rootFS.Remote() {
+		return nil
+	}
+	root := rootFS.HostPathName()
 
 	if err := ioutil.WriteFile(path.Join(root, "file-a"), randomContent(64, seed), 0755); err != nil {
 		return err
@@ -50,11 +56,17 @@ func addFiles(drv graphdriver.Driver, layer string, seed int64) error {
 }
 
 func checkFile(drv graphdriver.Driver, layer, filename string, content []byte) error {
-	root, err := drv.Get(layer, "")
+	rootFS, err := drv.Get(layer, "")
 	if err != nil {
 		return err
 	}
 	defer drv.Put(layer)
+
+	// TODO @gupta-ak. Implement this for the remote file system.
+	if rootFS.Remote() {
+		return nil
+	}
+	root := rootFS.HostPathName()
 
 	fileContent, err := ioutil.ReadFile(path.Join(root, filename))
 	if err != nil {
@@ -69,31 +81,49 @@ func checkFile(drv graphdriver.Driver, layer, filename string, content []byte) e
 }
 
 func addFile(drv graphdriver.Driver, layer, filename string, content []byte) error {
-	root, err := drv.Get(layer, "")
+	rootFS, err := drv.Get(layer, "")
 	if err != nil {
 		return err
 	}
 	defer drv.Put(layer)
+
+	// TODO @gupta-ak. Implement this for the remote file system.
+	if rootFS.Remote() {
+		return nil
+	}
+	root := rootFS.HostPathName()
 
 	return ioutil.WriteFile(path.Join(root, filename), content, 0755)
 }
 
 func addDirectory(drv graphdriver.Driver, layer, dir string) error {
-	root, err := drv.Get(layer, "")
+	rootFS, err := drv.Get(layer, "")
 	if err != nil {
 		return err
 	}
 	defer drv.Put(layer)
+
+	// TODO @gupta-ak. Implement this for the remote file system.
+	if rootFS.Remote() {
+		return nil
+	}
+	root := rootFS.HostPathName()
 
 	return os.MkdirAll(path.Join(root, dir), 0755)
 }
 
 func removeAll(drv graphdriver.Driver, layer string, names ...string) error {
-	root, err := drv.Get(layer, "")
+	rootFS, err := drv.Get(layer, "")
 	if err != nil {
 		return err
 	}
 	defer drv.Put(layer)
+
+	// TODO @gupta-ak. Implement this for the remote file system.
+	if rootFS.Remote() {
+		return nil
+	}
+	root := rootFS.HostPathName()
 
 	for _, filename := range names {
 		if err := os.RemoveAll(path.Join(root, filename)); err != nil {
@@ -104,11 +134,17 @@ func removeAll(drv graphdriver.Driver, layer string, names ...string) error {
 }
 
 func checkFileRemoved(drv graphdriver.Driver, layer, filename string) error {
-	root, err := drv.Get(layer, "")
+	rootFS, err := drv.Get(layer, "")
 	if err != nil {
 		return err
 	}
 	defer drv.Put(layer)
+
+	// TODO @gupta-ak. Implement this for the remote file system.
+	if rootFS.Remote() {
+		return nil
+	}
+	root := rootFS.HostPathName()
 
 	if _, err := os.Stat(path.Join(root, filename)); err == nil {
 		return fmt.Errorf("file still exists: %s", path.Join(root, filename))
@@ -120,11 +156,17 @@ func checkFileRemoved(drv graphdriver.Driver, layer, filename string) error {
 }
 
 func addManyFiles(drv graphdriver.Driver, layer string, count int, seed int64) error {
-	root, err := drv.Get(layer, "")
+	rootFS, err := drv.Get(layer, "")
 	if err != nil {
 		return err
 	}
 	defer drv.Put(layer)
+
+	// TODO @gupta-ak. Implement this for the remote file system.
+	if rootFS.Remote() {
+		return nil
+	}
+	root := rootFS.HostPathName()
 
 	for i := 0; i < count; i += 100 {
 		dir := path.Join(root, fmt.Sprintf("directory-%d", i))
@@ -143,11 +185,17 @@ func addManyFiles(drv graphdriver.Driver, layer string, count int, seed int64) e
 }
 
 func changeManyFiles(drv graphdriver.Driver, layer string, count int, seed int64) ([]archive.Change, error) {
-	root, err := drv.Get(layer, "")
+	rootFS, err := drv.Get(layer, "")
 	if err != nil {
 		return nil, err
 	}
 	defer drv.Put(layer)
+
+	// TODO @gupta-ak. Implement this for the remote file system.
+	if rootFS.Remote() {
+		return nil, nil
+	}
+	root := rootFS.HostPathName()
 
 	changes := []archive.Change{}
 	for i := 0; i < count; i += 100 {
@@ -194,11 +242,17 @@ func changeManyFiles(drv graphdriver.Driver, layer string, count int, seed int64
 }
 
 func checkManyFiles(drv graphdriver.Driver, layer string, count int, seed int64) error {
-	root, err := drv.Get(layer, "")
+	rootFS, err := drv.Get(layer, "")
 	if err != nil {
 		return err
 	}
 	defer drv.Put(layer)
+
+	// TODO @gupta-ak. Implement this for the remote file system.
+	if rootFS.Remote() {
+		return nil
+	}
+	root := rootFS.HostPathName()
 
 	for i := 0; i < count; i += 100 {
 		dir := path.Join(root, fmt.Sprintf("directory-%d", i))
@@ -248,11 +302,17 @@ func checkChanges(expected, actual []archive.Change) error {
 }
 
 func addLayerFiles(drv graphdriver.Driver, layer, parent string, i int) error {
-	root, err := drv.Get(layer, "")
+	rootFS, err := drv.Get(layer, "")
 	if err != nil {
 		return err
 	}
 	defer drv.Put(layer)
+
+	// TODO @gupta-ak. Implement this for the remote file system.
+	if rootFS.Remote() {
+		return nil
+	}
+	root := rootFS.HostPathName()
 
 	if err := ioutil.WriteFile(path.Join(root, "top-id"), []byte(layer), 0755); err != nil {
 		return err
@@ -289,11 +349,17 @@ func addManyLayers(drv graphdriver.Driver, baseLayer string, count int) (string,
 }
 
 func checkManyLayers(drv graphdriver.Driver, layer string, count int) error {
-	root, err := drv.Get(layer, "")
+	rootFS, err := drv.Get(layer, "")
 	if err != nil {
 		return err
 	}
 	defer drv.Put(layer)
+
+	// TODO @gupta-ak. Implement this for the remote file system.
+	if rootFS.Remote() {
+		return nil
+	}
+	root := rootFS.HostPathName()
 
 	layerIDBytes, err := ioutil.ReadFile(path.Join(root, "top-id"))
 	if err != nil {
