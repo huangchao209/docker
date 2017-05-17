@@ -738,5 +738,9 @@ func (n *naiveDiffPathDriver) DiffGetter(id string) (graphdriver.FileGetCloser, 
 	if err != nil {
 		return nil, err
 	}
-	return &fileGetPutter{storage.NewPathFileGetter(p.String()), n.Driver, id}, nil
+
+	if p.Remote() {
+		return nil, fmt.Errorf("naiveDiffGetter unsupported on remotefs")
+	}
+	return &fileGetPutter{storage.NewPathFileGetter(p.HostPathName()), n.Driver, id}, nil
 }

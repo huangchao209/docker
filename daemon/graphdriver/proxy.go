@@ -6,6 +6,7 @@ import (
 	"io"
 	"path/filepath"
 
+	"github.com/docker/docker/daemon/fs"
 	"github.com/docker/docker/pkg/archive"
 	"github.com/docker/docker/pkg/idtools"
 	"github.com/docker/docker/pkg/plugingetter"
@@ -129,20 +130,20 @@ func (d *graphDriverProxy) Remove(id string) error {
 	return nil
 }
 
-func (d *graphDriverProxy) Get(id, mountLabel string) (Mount, error) {
+func (d *graphDriverProxy) Get(id, mountLabel string) (fs.FilesystemOperator, error) {
 	args := &graphDriverRequest{
 		ID:         id,
 		MountLabel: mountLabel,
 	}
 	var ret graphDriverResponse
 	if err := d.p.Client().Call("GraphDriver.Get", args, &ret); err != nil {
-		return DummyMount{""}, err
+		return nil, err
 	}
 	var err error
 	if ret.Err != "" {
 		err = errors.New(ret.Err)
 	}
-	return DummyMount{filepath.Join(d.p.BasePath(), ret.Dir)}, err
+	return fs.NewFilesystemOperator(false, filepath.Join(d.p.BasePath(), ret.Dir)), err
 }
 
 func (d *graphDriverProxy) Put(id string) error {

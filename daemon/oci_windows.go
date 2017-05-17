@@ -73,7 +73,8 @@ func (daemon *Daemon) createSpec(c *container.Container) (*specs.Spec, error) {
 		isHyperV = c.HostConfig.Isolation.IsHyperV()
 	}
 	if !isHyperV {
-		s.Root.Path = c.BaseFS.String()
+		// Meaning, it's local.
+		s.Root.Path = c.BaseFS.HostPathName()
 	}
 	s.Root.Readonly = false // Windows does not support a read-only root filesystem
 

@@ -9,6 +9,7 @@ import (
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/backend"
 	"github.com/docker/docker/builder"
+	"github.com/docker/docker/daemon/fs"
 	"github.com/docker/docker/image"
 	"github.com/docker/docker/layer"
 	"github.com/docker/docker/pkg/stringid"
@@ -23,15 +24,15 @@ type releaseableLayer struct {
 	rwLayer    layer.RWLayer
 }
 
-func (rl *releaseableLayer) Mount() (string, error) {
+func (rl *releaseableLayer) Mount() (fs.FilesystemOperator, error) {
 	if rl.roLayer == nil {
-		return "", errors.New("can not mount an image with no root FS")
+		return nil, errors.New("can not mount an image with no root FS")
 	}
 	var err error
 	mountID := stringid.GenerateRandomID()
 	rl.rwLayer, err = rl.layerStore.CreateRWLayer(mountID, rl.roLayer.ChainID(), nil)
 	if err != nil {
-		return "", errors.Wrap(err, "failed to create rwlayer")
+		return nil, errors.Wrap(err, "failed to create rwlayer")
 	}
 
 	return rl.rwLayer.Mount("")

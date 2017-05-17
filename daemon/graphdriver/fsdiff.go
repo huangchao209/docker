@@ -1,6 +1,7 @@
 package graphdriver
 
 import (
+	"fmt"
 	"io"
 	"time"
 
@@ -58,8 +59,12 @@ func (gdw *NaiveDiffDriver) Diff(id, parent string) (arch io.ReadCloser, err err
 		}
 	}()
 
+	if layerFs.Remote() {
+		return nil, fmt.Errorf("Remote fs unsupported in NaiveDiffDriver")
+	}
+
 	if parent == "" {
-		archive, err := archive.Tar(layerFs.String(), archive.Uncompressed)
+		archive, err := archive.Tar(layerFs.HostPathName(), archive.Uncompressed)
 		if err != nil {
 			return nil, err
 		}
@@ -76,12 +81,16 @@ func (gdw *NaiveDiffDriver) Diff(id, parent string) (arch io.ReadCloser, err err
 	}
 	defer driver.Put(parent)
 
-	changes, err := archive.ChangesDirs(layerFs.String(), parentFs.String())
+	if parentFs.Remote() {
+		return nil, fmt.Errorf("Remote fs unsupported in NaiveDiffDriver")
+	}
+
+	changes, err := archive.ChangesDirs(layerFs.HostPathName(), parentFs.HostPathName())
 	if err != nil {
 		return nil, err
 	}
 
-	archive, err := archive.ExportChanges(layerFs.String(), changes, gdw.uidMaps, gdw.gidMaps)
+	archive, err := archive.ExportChanges(layerFs.HostPathName(), changes, gdw.uidMaps, gdw.gidMaps)
 	if err != nil {
 		return nil, err
 	}
@@ -110,18 +119,25 @@ func (gdw *NaiveDiffDriver) Changes(id, parent string) ([]archive.Change, error)
 	}
 	defer driver.Put(id)
 
-	parentFs := ""
+	if layerFs.Remote() {
+		return nil, fmt.Errorf("Remote fs unsupported in NaiveDiffDriver")
+	}
 
+	parentFs := ""
 	if parent != "" {
 		parentFsMount, err := driver.Get(parent, "")
 		if err != nil {
 			return nil, err
 		}
 		defer driver.Put(parent)
-		parentFs = parentFsMount.String()
+
+		if parentFsMount.Remote() {
+			return nil, fmt.Errorf("Remote fs unsupported in NaiveDiffDriver")
+		}
+		parentFs = parentFsMount.HostPathName()
 	}
 
-	return archive.ChangesDirs(layerFs.String(), parentFs)
+	return archive.ChangesDirs(layerFs.HostPathName(), parentFs)
 }
 
 // ApplyDiff extracts the changeset from the given diff into the
@@ -137,11 +153,15 @@ func (gdw *NaiveDiffDriver) ApplyDiff(id, parent string, diff io.Reader) (size i
 	}
 	defer driver.Put(id)
 
+	if layerFs.Remote() {
+		return 0, fmt.Errorf("Remote fs unsupported in NaiveDiffDriver")
+	}
+
 	options := &archive.TarOptions{UIDMaps: gdw.uidMaps,
 		GIDMaps: gdw.gidMaps}
 	start := time.Now().UTC()
 	logrus.Debug("Start untar layer")
-	if size, err = ApplyUncompressedLayer(layerFs.String(), diff, options); err != nil {
+	if size, err = ApplyUncompressedLayer(layerFs.HostPathName(), diff, options); err != nil {
 		return
 	}
 	logrus.Debugf("Untar time: %vs", time.Now().UTC().Sub(start).Seconds())
@@ -166,5 +186,9 @@ func (gdw *NaiveDiffDriver) DiffSize(id, parent string) (size int64, err error) 
 	}
 	defer driver.Put(id)
 
-	return archive.ChangesSize(layerFs.String(), changes), nil
+	if layerFs.Remote() {
+		return 0, fmt.Errorf("Remote fs unsupported in NaiveDiffDriver")
+	}
+
+	return archive.ChangesSize(layerFs.HostPathName(), changes), nil
 }

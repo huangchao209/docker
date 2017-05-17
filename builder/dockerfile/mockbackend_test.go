@@ -70,7 +70,6 @@ func (m *MockBackend) GetImageAndReleasableLayer(ctx context.Context, refOrID st
 	if m.getImageFunc != nil {
 		return m.getImageFunc(refOrID)
 	}
-
 	return &mockImage{id: "theid"}, &mockLayer{}, nil
 }
 

@@ -13,7 +13,7 @@ import (
 	containertypes "github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/container"
 	"github.com/docker/docker/daemon/config"
-	"github.com/docker/docker/daemon/graphdriver"
+	"github.com/docker/docker/daemon/fs"
 	"github.com/docker/docker/image"
 	"github.com/docker/docker/pkg/idtools"
 	"github.com/docker/docker/pkg/parsers"
@@ -76,7 +76,7 @@ func getBlkioWriteBpsDevices(config *containertypes.HostConfig) ([]blkiodev.Thro
 	return nil, nil
 }
 
-func (daemon *Daemon) getLayerInit() func(graphdriver.Mount) error {
+func (daemon *Daemon) getLayerInit() func(fs.FilesystemOperator) error {
 	return nil
 }
 

@@ -9,10 +9,6 @@ import (
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/container"
-	"github.com/docker/docker/daemon/fs"
-
-	"github.com/docker/docker/daemon/graphdriver"
-	"github.com/docker/docker/layer"
 
 	"github.com/docker/docker/pkg/archive"
 	"github.com/docker/docker/pkg/chrootarchive"
@@ -119,22 +115,19 @@ func (daemon *Daemon) containerStatPath(container *container.Container, path str
 		return nil, err
 	}
 
-	osType, err := daemon.getContainerOS(container)
-	if err != nil {
-		return nil, err
-	}
+	osType := container.Platform
 
 	return containerStatPathNoLock(container, path, osType)
 }
 
 func containerStatPathNoLock(container *container.Container, path string, osType string) (*types.ContainerPathStat, error) {
-	placeholderGuptaAk := fs.NewFilesystemOperator(false, container.BaseFS)
-	resolvedPath, absPath, err := placeholderGuptaAk.ResolvePath(path)
+
+	resolvedPath, absPath, err := container.BaseFS.ResolvePath(path)
 	if err != nil {
 		return nil, err
 	}
 
-	info, err := placeholderGuptaAk.Lstat(resolvedPath)
+	info, err := container.BaseFS.Lstat(resolvedPath)
 	if err != nil {
 		return nil, err
 	}
@@ -142,12 +135,12 @@ func containerStatPathNoLock(container *container.Container, path string, osType
 	var linkTarget string
 	if info.Mode()&os.ModeSymlink != 0 {
 		// Fully evaluate the symlink in the scope of the container rootfs.
-		hostPath, err := placeholderGuptaAk.GetResourcePath(absPath)
+		hostPath, err := container.BaseFS.GetResourcePath(absPath)
 		if err != nil {
 			return nil, err
 		}
 
-		linkTarget, err = pathutils.Rel(container.BaseFS, hostPath, osType)
+		linkTarget, err = pathutils.Rel(container.BaseFS.HostPathName(), hostPath, osType)
 		if err != nil {
 			return nil, err
 		}
@@ -197,18 +190,16 @@ func (daemon *Daemon) containerArchivePath(container *container.Container, path 
 		return nil, nil, err
 	}
 
-	osType, err := daemon.getContainerOS(container)
-	if err != nil {
-		return nil, nil, err
-	}
+	osType := container.Platform
+
+	path = toImagePath(path, osType)
 
 	stat, err = containerStatPathNoLock(container, path, osType)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	placeholderGuptaAk := fs.NewFilesystemOperator(false, container.BaseFS)
-	resolvedPath, absPath, err := placeholderGuptaAk.ResolvePath(path)
+	resolvedPath, absPath, err := container.BaseFS.ResolvePath(path)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -225,7 +216,7 @@ func (daemon *Daemon) containerArchivePath(container *container.Container, path 
 	sourceDir, opts := archive.TarResourceRebaseOpts(resolvedPath, pathutils.Base(absPath, osType), osType)
 	fmt.Println(sourceDir, *opts)
 
-	data, err := placeholderGuptaAk.ArchivePath(sourceDir, opts)
+	data, err := container.BaseFS.ArchivePath(sourceDir, opts)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -264,12 +255,11 @@ func (daemon *Daemon) containerExtractToDir(container *container.Container, path
 		return err
 	}
 
-	osType, err := daemon.getContainerOS(container)
-	if err != nil {
-		return err
-	}
+	osType := container.Platform
 
-	placeholderGuptaAk := fs.NewFilesystemOperator(false, container.BaseFS)
+	fmt.Println(path, osType)
+	path = toImagePath(path, osType)
+	fmt.Println(path, osType)
 
 	// Check if a drive letter supplied, it must be the system drive. No-op except on Windows
 	path, err = system.CheckSystemDriveAndRemoveDriveLetterOS(path, osType)
@@ -287,12 +277,12 @@ func (daemon *Daemon) containerExtractToDir(container *container.Container, path
 	cleanedPath := pathutils.Join(osType, string(pathutils.Separator(osType)), path)
 	absPath := archive.PreserveTrailingDotOrSeparatorOS(cleanedPath, path, osType)
 
-	resolvedPath, err := placeholderGuptaAk.GetResourcePath(absPath)
+	resolvedPath, err := container.BaseFS.GetResourcePath(absPath)
 	if err != nil {
 		return err
 	}
 
-	stat, err := placeholderGuptaAk.Lstat(resolvedPath)
+	stat, err := container.BaseFS.Lstat(resolvedPath)
 
 	if err != nil {
 		return err
@@ -315,15 +305,15 @@ func (daemon *Daemon) containerExtractToDir(container *container.Container, path
 	// filter driver, we are guaranteed that the path will always be
 	// a volume file path.
 	var baseRel string
-	if strings.HasPrefix(resolvedPath.String(), `\\?\Volume{`) {
-		if strings.HasPrefix(resolvedPath.String(), container.BaseFS.String()) {
-			baseRel = resolvedPath.String()[len(container.BaseFS.String()):]
+	if strings.HasPrefix(resolvedPath, `\\?\Volume{`) {
+		if strings.HasPrefix(resolvedPath, container.BaseFS.HostPathName()) {
+			baseRel = resolvedPath[len(container.BaseFS.HostPathName()):]
 			if baseRel[:1] == `\` {
 				baseRel = baseRel[1:]
 			}
 		}
 	} else {
-		baseRel, err = pathutils.Rel(container.BaseFS, resolvedPath, osType)
+		baseRel, err = pathutils.Rel(container.BaseFS.HostPathName(), resolvedPath, osType)
 	}
 	if err != nil {
 		return err
@@ -337,7 +327,7 @@ func (daemon *Daemon) containerExtractToDir(container *container.Container, path
 	// TODO @gupta-ak: Once Windows supports it, we would need to change the
 	// functions to understand Windows/Linux OS
 	var toVolume bool
-	if !placeholderGuptaAk.Remote() {
+	if !container.BaseFS.Remote() {
 		toVolume, err = checkIfPathIsInAVolume(container, absPath)
 		if err != nil {
 			return err
@@ -359,7 +349,7 @@ func (daemon *Daemon) containerExtractToDir(container *container.Container, path
 		}
 	}
 
-	if err := placeholderGuptaAk.ExtractArchive(content, resolvedPath, options); err != nil {
+	if err := container.BaseFS.ExtractArchive(content, resolvedPath, options); err != nil {
 		return err
 	}
 
@@ -396,17 +386,16 @@ func (daemon *Daemon) containerCopy(container *container.Container, resource str
 		return nil, err
 	}
 
-	osType, err := daemon.getContainerOS(container)
-	if err != nil {
-		return nil, err
-	}
-	placeholderGuptaAk := fs.NewFilesystemOperator(false, container.BaseFS)
-	basePath, err := placeholderGuptaAk.GetResourcePath(resource)
+	osType := container.Platform
+
+	resource = toImagePath(resource, osType)
+
+	basePath, err := container.BaseFS.GetResourcePath(resource)
 	if err != nil {
 		return nil, err
 	}
 
-	stat, err := placeholderGuptaAk.Stat(basePath)
+	stat, err := container.BaseFS.Stat(basePath)
 	if err != nil {
 		return nil, err
 	}
@@ -421,7 +410,10 @@ func (daemon *Daemon) containerCopy(container *container.Container, resource str
 		basePath = pathutils.Dir(basePath, osType)
 	}
 
-	archive, err := placeholderGuptaAk.ArchivePath(basePath, &archive.TarOptions{
+	archive, err := container.BaseFS.ArchivePath(basePath, &archive.TarOptions{
+		Compression:  archive.Uncompressed,
+		IncludeFiles: filter,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -466,20 +458,16 @@ func (daemon *Daemon) CopyOnBuild(cID, destPath, srcRoot, srcPath string, decomp
 	}
 	defer daemon.Unmount(c)
 
-	osType, err := daemon.getContainerOS(c)
-	if err != nil {
-		return err
-	}
-
-	placeholderGuptaAk := fs.NewFilesystemOperator(false, c.BaseFS)
-	dest, err := c.GetResourcePath(destPath)
-	if err != nil {
-		return err
-	}
+	osType := c.Platform
 
 	// Work in image OS specific file paths
-	destPath = pathutils.NormalizePath(destPath, osType)
 	separator := pathutils.Separator(osType)
+	destPath = toImagePath(destPath, osType)
+
+	dest, err := c.BaseFS.GetResourcePath(destPath)
+	if err != nil {
+		return err
+	}
 
 	// Preserve the trailing slash
 	// TODO: why are we appending another path separator if there was already one?
@@ -487,10 +475,9 @@ func (daemon *Daemon) CopyOnBuild(cID, destPath, srcRoot, srcPath string, decomp
 		destDir = true
 		dest += string(separator)
 	}
+	destPath = dest
 
-	destmnt = dest
-
-	destStat, err := placeholderGuptaAk.Stat(destPath)
+	destStat, err := c.BaseFS.Stat(destPath)
 	if err != nil {
 		if !os.IsNotExist(err) {
 			//logrus.Errorf("Error performing os.Stat on %s. %s", destPath, err)
@@ -509,6 +496,11 @@ func (daemon *Daemon) CopyOnBuild(cID, destPath, srcRoot, srcPath string, decomp
 	src, err := os.Stat(fullSrcPath)
 	if err != nil {
 		return err
+	}
+
+	// @TODO gupta-ak. Implement this part with the remote file system API
+	if c.BaseFS.Remote() {
+		return fmt.Errorf("Docker build not supported on remote file systems yet.")
 	}
 
 	if src.IsDir() {
@@ -553,4 +545,8 @@ func (daemon *Daemon) CopyOnBuild(cID, destPath, srcRoot, srcPath string, decomp
 	}
 
 	return fixPermissions(fullSrcPath, destPath, rootUID, rootGID, destExists)
+}
+
+func toImagePath(path string, osType string) string {
+	return strings.Replace(path, "/", string(pathutils.Separator(osType)), -1)
 }

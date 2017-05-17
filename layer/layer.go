@@ -15,7 +15,7 @@ import (
 
 	"github.com/Sirupsen/logrus"
 	"github.com/docker/distribution"
-	"github.com/docker/docker/daemon/graphdriver"
+	"github.com/docker/docker/daemon/fs"
 	"github.com/docker/docker/pkg/archive"
 	"github.com/opencontainers/go-digest"
 )
@@ -138,7 +138,7 @@ type RWLayer interface {
 
 	// Mount mounts the RWLayer and returns the filesystem path
 	// the to the writable layer.
-	Mount(mountLabel string) (graphdriver.Mount, error)
+	Mount(mountLabel string) (fs.FilesystemOperator, error)
 
 	// Unmount unmounts the RWLayer. This should be called
 	// for every mount. If there are multiple mount calls
@@ -179,7 +179,7 @@ type Metadata struct {
 // writable mount. Changes made here will
 // not be included in the Tar stream of the
 // RWLayer.
-type MountInit func(root graphdriver.Mount) error
+type MountInit func(root fs.FilesystemOperator) error
 
 // CreateRWLayerOpts contains optional arguments to be passed to CreateRWLayer
 type CreateRWLayerOpts struct {

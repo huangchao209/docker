@@ -65,7 +65,7 @@ func (daemon *Daemon) getLibcontainerdCreateOptions(container *container.Contain
 			return nil, fmt.Errorf("failed to get layer path from graphdriver %s for ImageID %s - %s", daemon.stores[container.Platform].layerStore, img.RootFS.ChainID(), err)
 		}
 		// Reverse order, expecting parent most first
-		layerOpts.LayerPaths = append([]string{layerPath.String()}, layerOpts.LayerPaths...)
+		layerOpts.LayerPaths = append([]string{layerPath}, layerOpts.LayerPaths...)
 	}
 
 	// Get endpoints for the libnetwork allocated networks to the container

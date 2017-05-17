@@ -186,7 +186,9 @@ func (im *imageMount) Source() (builder.Source, error) {
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to mount %s", im.image.ImageID())
 		}
-		source, err := remotecontext.NewLazyContext(mountPath)
+		// TODO: @gupta-ak, figure out how mountimage is used and how it was replaced
+		// in the newer moby/moby. right now assume that it's on the host.
+		source, err := remotecontext.NewLazyContext(mountPath.HostPathName())
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to create lazycontext for %s", mountPath)
 		}

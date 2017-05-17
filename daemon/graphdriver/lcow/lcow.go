@@ -16,6 +16,7 @@ import (
 
 	"github.com/Microsoft/servicevm"
 	"github.com/Sirupsen/logrus"
+	"github.com/docker/docker/daemon/fs"
 	"github.com/docker/docker/daemon/graphdriver"
 	"github.com/docker/docker/pkg/archive"
 	"github.com/docker/docker/pkg/idtools"
@@ -38,7 +39,10 @@ func (c *checker) IsMounted(path string) bool {
 	return false
 }
 
-// InitLCOW returns a new LCOW storage driver
+// Compile time check to make sure that Driver implements the LayerGetter interface
+var _ graphdriver.LayerGetter = &Driver{}
+
+// InitLCOW returns a new Windows storage filter driver.
 func InitLCOW(home string, options []string, uidMaps, gidMaps []idtools.IDMap) (graphdriver.Driver, error) {
 	logrus.Debugf("lcow InitLCOW at %s", home)
 	if err := idtools.MkdirAllAs(home, 0700, 0, 0); err != nil {
@@ -131,11 +135,11 @@ func (d *Driver) Remove(id string) error {
 }
 
 // Get returns the rootfs path for the id. This will mount the dir at its given path.
-func (d *Driver) Get(id, mountLabel string) (string, error) {
+func (d *Driver) Get(id, mountLabel string) (fs.FilesystemOperator, error) {
 	logrus.Debugf("LCOWDriver Get() id %s", id)
 	// TODO @gupta-ak. graphdriver.Get() needs to return an interface
 	// instead of just a string, since the mount point doesn't exist on the host
-	return "", nil
+	return fs.NewFilesystemOperator(true, "/does/not/exist/"), nil
 }
 
 // Put adds a new layer to the driver.
@@ -231,6 +235,16 @@ func (d *Driver) GetMetadata(id string) (map[string]string, error) {
 	m := make(map[string]string)
 	m["dir"] = d.dir(id)
 	return m, nil
+}
+
+// GetLayerPath returns the path to the given layer id.
+func (d *Driver) GetLayerPath(id string) (string, error) {
+	logrus.Debugf("LCOWDriver GetLayerPath() id %s", id)
+	path := d.dir(id)
+	if _, err := os.Lstat(path); err != nil {
+		return "", err
+	}
+	return path, nil
 }
 
 // dir returns the absolute path to the layer.

@@ -23,7 +23,7 @@ import (
 	swarmtypes "github.com/docker/docker/api/types/swarm"
 	"github.com/docker/docker/container/stream"
 	"github.com/docker/docker/daemon/exec"
-	"github.com/docker/docker/daemon/graphdriver"
+	"github.com/docker/docker/daemon/fs"
 	"github.com/docker/docker/daemon/logger"
 	"github.com/docker/docker/daemon/logger/jsonfilelog"
 	"github.com/docker/docker/daemon/network"
@@ -64,10 +64,10 @@ var (
 type Container struct {
 	StreamConfig *stream.Config
 	// embed for Container to support states directly.
-	*State          `json:"State"`    // Needed for Engine API version <= 1.11
-	Root            string            `json:"-"` // Path to the "home" of the container, including metadata.
-	BaseFS          graphdriver.Mount `json:"-"` // Path to the graphdriver mountpoint
-	RWLayer         layer.RWLayer     `json:"-"`
+	*State          `json:"State"`        // Needed for Engine API version <= 1.11
+	Root            string                `json:"-"` // Path to the "home" of the container, including metadata.
+	BaseFS          fs.FilesystemOperator `json:"-"` // Filesystem operator for copying stuff to/from container.
+	RWLayer         layer.RWLayer         `json:"-"`
 	ID              string
 	Created         time.Time
 	Managed         bool
@@ -240,6 +240,9 @@ func (container *Container) SetupWorkingDirectory(rootUID, rootGID int) error {
 		return nil
 	}
 
+	// TODO: @gupta-ak. Implement this later. This can be implemented as extracting a tar archive
+	// on the host. Or just add a mkdirAll function to the remote fs.
+
 	container.Config.WorkingDir = filepath.Clean(container.Config.WorkingDir)
 
 	pth, err := container.GetResourcePath(container.Config.WorkingDir)
@@ -247,8 +250,8 @@ func (container *Container) SetupWorkingDirectory(rootUID, rootGID int) error {
 		return err
 	}
 
-	if err := idtools.MkdirAllNewAs(pth.String(), 0755, rootUID, rootGID); err != nil {
-		pthInfo, err2 := os.Stat(pth.String())
+	if err := idtools.MkdirAllNewAs(pth, 0755, rootUID, rootGID); err != nil {
+		pthInfo, err2 := os.Stat(pth)
 		if err2 == nil && pthInfo != nil && !pthInfo.IsDir() {
 			return fmt.Errorf("Cannot mkdir: %s is not a directory", container.Config.WorkingDir)
 		}
@@ -272,19 +275,18 @@ func (container *Container) SetupWorkingDirectory(rootUID, rootGID int) error {
 //       if no component of the returned path changes (such as a component
 //       symlinking to a different path) between using this method and using the
 //       path. See symlink.FollowSymlinkInScope for more details.
-func (container *Container) GetResourcePath(path string) (graphdriver.Mount, error) {
+func (container *Container) GetResourcePath(path string) (string, error) {
 	// IMPORTANT - These are paths on the OS where the daemon is running, hence
 	// any filepath operations must be done in an OS agnostic way.
-	root := container.BaseFS.HostPathName()
-	r, e := container.BaseFS.ResolvePath(path, root)
+	r, e := container.BaseFS.GetResourcePath(path)
 
 	// Log this here on the daemon side as there's otherwise no indication apart
 	// from the error being propagated all the way back to the client. This makes
 	// debugging significantly easier and clearly indicates the error comes from the daemon.
 	if e != nil {
-		logrus.Errorf("Failed to EvalScopePath BaseFS %s, path %s, %s\n", root, path, e)
+		logrus.Errorf("Failed to GetResourcePath: path=%s, error=%s\n", path, e)
 	}
-	return graphdriver.DummyMount{r}, e
+	return r, e
 }
 
 // GetRootResourcePath evaluates `path` in the scope of the container's root, with proper path
