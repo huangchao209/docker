@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"runtime"
 	"strconv"
 	"strings"
 
@@ -17,6 +18,7 @@ import (
 	"github.com/docker/docker/api/types/versions"
 	"github.com/docker/docker/pkg/ioutils"
 	"github.com/docker/docker/pkg/streamformatter"
+	"github.com/docker/docker/pkg/system"
 	"github.com/docker/docker/registry"
 	"golang.org/x/net/context"
 )
@@ -69,6 +71,26 @@ func (s *imageRouter) postCommit(ctx context.Context, w http.ResponseWriter, r *
 	})
 }
 
+// Ensures the requested platform is valid and normalized
+func validatePlatform(req string) (string, error) {
+	req = strings.ToLower(req)
+	if req == "" {
+		req = runtime.GOOS // default to host platform
+	}
+	valid := []string{runtime.GOOS}
+
+	if runtime.GOOS == "windows" && system.LCOWSupported() {
+		valid = append(valid, "linux")
+	}
+
+	for _, item := range valid {
+		if req == item {
+			return req, nil
+		}
+	}
+	return "", fmt.Errorf("invalid platform requested: %s", req)
+}
+
 // Creates an image from Pull or from Import
 func (s *imageRouter) postImagesCreate(ctx context.Context, w http.ResponseWriter, r *http.Request, vars map[string]string) error {
 	if err := httputils.ParseForm(r); err != nil {
@@ -76,14 +98,19 @@ func (s *imageRouter) postImagesCreate(ctx context.Context, w http.ResponseWrite
 	}
 
 	var (
-		image   = r.Form.Get("fromImage")
-		repo    = r.Form.Get("repo")
-		tag     = r.Form.Get("tag")
-		message = r.Form.Get("message")
-		err     error
-		output  = ioutils.NewWriteFlusher(w)
+		image    = r.Form.Get("fromImage")
+		repo     = r.Form.Get("repo")
+		tag      = r.Form.Get("tag")
+		message  = r.Form.Get("message")
+		platform = r.Form.Get("platform")
+		err      error
+		output   = ioutils.NewWriteFlusher(w)
 	)
 	defer output.Close()
+
+	if platform, err = validatePlatform(platform); err != nil {
+		return err
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 
@@ -106,12 +133,13 @@ func (s *imageRouter) postImagesCreate(ctx context.Context, w http.ResponseWrite
 			}
 		}
 
-		err = s.backend.PullImage(ctx, image, tag, metaHeaders, authConfig, output)
+		err = s.backend.PullImage(ctx, image, tag, platform, metaHeaders, authConfig, output)
 	} else { //import
 		src := r.Form.Get("fromSrc")
 		// 'err' MUST NOT be defined within this block, we need any error
 		// generated from the download to be available to the output
 		// stream processing below
+		// TODO @jhowardmsft LCOW Support: This will need extending for the platform too.
 		err = s.backend.ImportImage(src, repo, tag, message, r.Body, output, r.Form["changes"])
 	}
 	if err != nil {

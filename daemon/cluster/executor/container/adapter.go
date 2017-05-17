@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime"
 	"strings"
 	"syscall"
 	"time"
@@ -87,7 +88,9 @@ func (c *containerAdapter) pullImage(ctx context.Context) error {
 	pr, pw := io.Pipe()
 	metaHeaders := map[string][]string{}
 	go func() {
-		err := c.backend.PullImage(ctx, c.container.image(), "", metaHeaders, authConfig, pw)
+		// TODO @jhowardmsft LCOW Support: For now use the host OS. This will need revisiting as
+		// the stack is built up to include LCOW support for swarm.
+		err := c.backend.PullImage(ctx, c.container.image(), "", runtime.GOOS, metaHeaders, authConfig, pw)
 		pw.CloseWithError(err)
 	}()
 
