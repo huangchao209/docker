@@ -2,6 +2,8 @@
 
 package opengcs
 
+// TODO @jhowardmsft - This will move to Microsoft/opengcs soon
+
 import (
 	"encoding/json"
 	"fmt"
@@ -29,8 +31,6 @@ const (
 	ModeRequestVhdx
 	ModeRequestKernelInitrd
 )
-
-// Constants for the
 
 // Config is the structure used to configuring a utility VM to be used
 // as a service VM. There are two ways of starting. Either supply a VHD,
@@ -66,15 +66,17 @@ func DefaultConfig(options []string) (Config, error) {
 		Svm:    false,
 	}
 
+	// TODO: Add a timeout (seconds) and plumb through.
+
 	for _, v := range options {
 		opt := strings.SplitN(v, "=", 2)
 		if len(opt) == 2 {
 			switch strings.ToLower(opt[0]) {
-			case "lcowuvmkernel":
+			case "opengcskernel":
 				config.Kernel = opt[1]
-			case "lcowuvminitrd":
+			case "opengcsinitrd":
 				config.Initrd = opt[1]
-			case "lcowuvmvhdx":
+			case "opengcsvhdx":
 				config.Vhdx = opt[1]
 			}
 		}
@@ -129,6 +131,8 @@ func (config *Config) validate() error {
 	return nil
 }
 
+// TODO for timeout, need to return a structure including timeout and container.
+
 // Create creates a utility VM from a configuration.
 func (config *Config) Create() (hcsshim.Container, error) {
 	logrus.Debugf("opengcs Create: %+v", config)
@@ -162,7 +166,7 @@ func (config *Config) Create() (hcsshim.Container, error) {
 	}
 
 	configurationS, _ := json.Marshal(configuration)
-	logrus.Debugf("opengcs Create: Calling HCS with '%s'", string(configurationS))
+	logrus.Debugf("opengcs Create: calling HCS with '%s'", string(configurationS))
 	uvm, err := hcsshim.CreateContainer(config.Name, configuration)
 	if err != nil {
 		return nil, err

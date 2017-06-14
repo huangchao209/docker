@@ -2,6 +2,8 @@
 
 package opengcs
 
+// TODO @jhowardmsft - This will move to Microsoft/opengcs soon
+
 import (
 	"fmt"
 	"io"
@@ -19,7 +21,7 @@ type process struct {
 
 // createUtilsProcess is a convenient wrapper for hcsshim.createUtilsProcess to use when
 // communicating with a utility VM.
-func createUtilsProcess(uvm hcsshim.Container) (process, error) {
+func createUtilsProcess(uvm hcsshim.Container, commandLine string) (process, error) {
 	logrus.Debugf("opengcs: createUtilsProcess")
 
 	if uvm == nil {
@@ -32,7 +34,7 @@ func createUtilsProcess(uvm hcsshim.Container) (process, error) {
 	)
 
 	env := make(map[string]string)
-	env["PATH"] = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/root/integration"
+	env["PATH"] = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:"
 	config := &hcsshim.ProcessConfig{
 		EmulateConsole:    false,
 		CreateStdInPipe:   true,
@@ -41,7 +43,7 @@ func createUtilsProcess(uvm hcsshim.Container) (process, error) {
 		CreateInUtilityVm: true,
 		WorkingDirectory:  "/bin",
 		Environment:       env,
-		CommandLine:       "./svm_utils",
+		CommandLine:       commandLine,
 	}
 	proc.Process, err = uvm.CreateProcess(config)
 	if err != nil {
