@@ -120,7 +120,7 @@ const (
 // Supported resource types are Network and Request Types are Add/Remove
 type ResourceModificationRequestResponse struct {
 	Resource ResourceType `json:"ResourceType"`
-	Data     string       `json:"Settings"`
+	Data     interface{}  `json:"Settings"`
 	Request  RequestType  `json:"RequestType,omitempty"`
 }
 
@@ -584,7 +584,7 @@ func (container *container) CreateProcess(c *ProcessConfig) (Process, error) {
 		return nil, makeContainerError(container, operation, "", err)
 	}
 
-	logrus.Debugf(title+" succeeded id=%s processid=%s", container.id, process.processID)
+	logrus.Debugf(title+" succeeded id=%s processid=%d", container.id, process.processID)
 	return process, nil
 }
 
